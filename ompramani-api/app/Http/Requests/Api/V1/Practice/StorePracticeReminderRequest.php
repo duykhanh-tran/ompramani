@@ -6,6 +6,7 @@ namespace App\Http\Requests\Api\V1\Practice;
 
 use App\Enums\PracticeReminderScheduleType;
 use App\Enums\PracticeType;
+use App\Rules\ValidTimezone;
 use App\Services\Practice\PracticeReminderScheduleService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -30,7 +31,7 @@ class StorePracticeReminderRequest extends FormRequest
             'title' => ['nullable', 'string', 'max:100'],
             'schedule_type' => ['required', new Enum(PracticeReminderScheduleType::class)],
             'local_time' => ['required', 'string', 'regex:/^(?:[01]\d|2[0-3]):[0-5]\d$/'],
-            'timezone' => ['required', 'string', 'timezone:all'],
+            'timezone' => ['required', 'string', new ValidTimezone('Múi giờ không hợp lệ.')],
             'local_date' => ['required_if:schedule_type,once', 'nullable', 'date_format:Y-m-d'],
             'weekdays' => ['required_if:schedule_type,weekly', 'nullable', 'array', 'min:1', 'max:7'],
             'weekdays.*' => ['integer', 'between:1,7', 'distinct'],

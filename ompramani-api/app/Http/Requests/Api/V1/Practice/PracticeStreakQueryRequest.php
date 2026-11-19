@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Practice;
 
+use App\Rules\ValidTimezone;
 use Illuminate\Foundation\Http\FormRequest;
 
 class PracticeStreakQueryRequest extends FormRequest
@@ -17,13 +18,13 @@ class PracticeStreakQueryRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, mixed>>
      */
     public function rules(): array
     {
         return [
             'days' => ['nullable', 'integer', 'in:7,30,90'],
-            'timezone' => ['nullable', 'string', 'timezone:all_with_bc'],
+            'timezone' => ['nullable', 'string', new ValidTimezone],
         ];
     }
 

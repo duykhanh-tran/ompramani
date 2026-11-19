@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1\Practice;
 
+use App\Rules\ValidTimezone;
 use DateTimeZone;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -22,11 +23,7 @@ class UpdatePracticePlanRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'timezone' => ['sometimes', 'required', 'string', function (string $attribute, mixed $value, \Closure $fail): void {
-                if (! in_array($value, DateTimeZone::listIdentifiers(), true)) {
-                    $fail('Múi giờ không hợp lệ.');
-                }
-            }],
+            'timezone' => ['sometimes', 'required', 'string', new ValidTimezone('Múi giờ không hợp lệ.')],
             'starts_on' => ['nullable', 'date_format:Y-m-d'],
             'ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:starts_on'],
         ];

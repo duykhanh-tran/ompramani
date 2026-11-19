@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1\Practice;
 
+use App\Rules\ValidTimezone;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -25,7 +26,7 @@ class UpdatePracticeReminderSettingsRequest extends FormRequest
             'quiet_hours_enabled' => ['required', 'boolean'],
             'quiet_start_local_time' => ['nullable', 'string', 'regex:/^(?:[01]\d|2[0-3]):[0-5]\d$/'],
             'quiet_end_local_time' => ['nullable', 'string', 'regex:/^(?:[01]\d|2[0-3]):[0-5]\d$/'],
-            'quiet_hours_timezone' => ['nullable', 'string', 'timezone:all'],
+            'quiet_hours_timezone' => ['nullable', 'string', new ValidTimezone('Múi giờ yên tĩnh không hợp lệ.')],
         ];
     }
 

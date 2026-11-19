@@ -70,21 +70,29 @@ class PracticeReminderDispatchService
             $dueInstant = $fresh->next_due_at_utc;
             $revision = $fresh->schedule_revision;
 
-            // Atomic delivery claim via unique database constraint
-            try {
-                /** @var PracticeReminderDelivery $delivery */
-                $delivery = PracticeReminderDelivery::create([
-                    'practice_reminder_id' => $fresh->id,
-                    'user_id' => $fresh->user_id,
-                    'scheduled_for_utc' => $dueInstant,
-                    'schedule_revision' => $revision,
-                    'channel' => 'database',
-                    'status' => PracticeReminderDeliveryStatus::Processing,
-                ]);
-            } catch (QueryException $e) {
+            // Atomic delivery claim via unique database constraint (safe across SQLite, MySQL, and PostgreSQL)
+            $inserted = PracticeReminderDelivery::insertOrIgnore([
+                'practice_reminder_id' => $fresh->id,
+                'user_id' => $fresh->user_id,
+                'scheduled_for_utc' => $dueInstant,
+                'schedule_revision' => $revision,
+                'channel' => 'database',
+                'status' => PracticeReminderDeliveryStatus::Processing->value,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if ($inserted === 0) {
                 // Duplicate occurrence already claimed
                 return 'duplicate';
             }
+
+            /** @var PracticeReminderDelivery $delivery */
+            $delivery = PracticeReminderDelivery::where('practice_reminder_id', $fresh->id)
+                ->where('scheduled_for_utc', $dueInstant)
+                ->where('schedule_revision', $revision)
+                ->where('channel', 'database')
+                ->firstOrFail();
 
             $user = $fresh->user;
             if (! $user) {

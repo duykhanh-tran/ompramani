@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Profile;
 
+use App\Rules\ValidTimezone;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -31,7 +32,7 @@ class UpdateProfileRequest extends FormRequest
             'location' => ['nullable', 'string', 'max:150'],
             'bio' => ['nullable', 'string', 'max:1000'],
             'dharma_journey_started_at' => ['nullable', 'date', 'before_or_equal:today'],
-            'timezone' => ['nullable', 'string', 'timezone:all_with_bc'],
+            'timezone' => ['nullable', 'string', new ValidTimezone],
         ];
     }
 

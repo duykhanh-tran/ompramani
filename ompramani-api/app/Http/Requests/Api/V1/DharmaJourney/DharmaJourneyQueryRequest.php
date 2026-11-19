@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\DharmaJourney;
 
+use App\Rules\ValidTimezone;
 use Illuminate\Foundation\Http\FormRequest;
 
 class DharmaJourneyQueryRequest extends FormRequest
@@ -17,13 +18,13 @@ class DharmaJourneyQueryRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, mixed>>
      */
     public function rules(): array
     {
         return [
             'range' => ['nullable', 'string', 'in:7d,30d,90d,all'],
-            'timezone' => ['nullable', 'string', 'timezone:all_with_bc'],
+            'timezone' => ['nullable', 'string', new ValidTimezone],
         ];
     }
 
