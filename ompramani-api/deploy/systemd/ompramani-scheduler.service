@@ -1,0 +1,12 @@
+[Unit]
+Description=OmPraMani Laravel Scheduler Task
+After=network.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/ompramani/ompramani-api
+ExecStart=/usr/bin/php /var/www/ompramani/ompramani-api/artisan schedule:run
+StandardOutput=append:/var/www/ompramani/ompramani-api/storage/logs/scheduler.log
+StandardError=append:/var/www/ompramani/ompramani-api/storage/logs/scheduler-error.log

@@ -1,0 +1,30 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "name": "ompramani-monorepo",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "pnpm --parallel --filter @repo/api --filter @repo/web dev",
+        "dev:api": "pnpm --filter @repo/api dev",
+        "dev:web": "pnpm --filter @repo/web dev",
+        "build": "pnpm -r build",
+        "lint": "pnpm -r lint",
+        "test": "pnpm -r test",
+        "typecheck": "pnpm -r typecheck",
+        "db:generate": "pnpm --filter @repo/api db:generate",
+        "db:migrate": "pnpm --filter @repo/api db:migrate",
+        "db:seed": "pnpm --filter @repo/api db:seed",
+        "laravel:build": "vite build",
+        "laravel:dev": "vite"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "^4.0.0",
+        "concurrently": "^10.0.3",
+        "laravel-vite-plugin": "^3.1",
+        "tailwindcss": "^4.0.0",
+        "vite": "^8.0.0"
+    },
+    "optionalDependencies": {
+        "@laravel/multiplex": "^0.4.1"
+    }
+}

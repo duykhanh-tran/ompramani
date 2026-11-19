@@ -1,0 +1,10 @@
+[Unit]
+Description=Run OmPraMani Laravel Scheduler Every Minute
+After=network.target
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

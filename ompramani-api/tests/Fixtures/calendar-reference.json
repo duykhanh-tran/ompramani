@@ -1,0 +1,68 @@
+{
+  "description": "Independent reference fixtures for Vietnamese Lunisolar Calendar",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "sources": [
+    "Viện Hàn lâm Khoa học và Công nghệ Việt Nam (Lịch Vạn Niên Việt Nam)",
+    "Hồ Ngọc Đức - Bảng tính Âm Lịch Việt Nam (dựa trên Jean Meeus Astronomical Algorithms 1998)",
+    "Hồ sơ lịch pháp Việt Nam 1985 (Tết Ất Sửu 21/01/1985 khác với Trung Quốc 20/02/1985)"
+  ],
+  "tet_fixtures": [
+    {"solar_date": "1985-01-21", "lunar_year": 1985, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Ất Sửu", "note": "Tết Ất Sửu 1985 (Việt Nam ăn trước Trung Quốc 1 tháng)"},
+    {"solar_date": "2000-02-05", "lunar_year": 2000, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Canh Thìn", "note": "Tết Canh Thìn 2000"},
+    {"solar_date": "2010-02-14", "lunar_year": 2010, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Canh Dần", "note": "Tết Canh Dần 2010"},
+    {"solar_date": "2020-01-25", "lunar_year": 2020, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Canh Tý", "note": "Tết Canh Tý 2020"},
+    {"solar_date": "2021-02-12", "lunar_year": 2021, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Tân Sửu", "note": "Tết Tân Sửu 2021"},
+    {"solar_date": "2022-02-01", "lunar_year": 2022, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Nhâm Dần", "note": "Tết Nhâm Dần 2022"},
+    {"solar_date": "2023-01-22", "lunar_year": 2023, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Quý Mão", "note": "Tết Quý Mão 2023"},
+    {"solar_date": "2024-02-10", "lunar_year": 2024, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Giáp Thìn", "note": "Tết Giáp Thìn 2024"},
+    {"solar_date": "2025-01-29", "lunar_year": 2025, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Ất Tỵ", "note": "Tết Ất Tỵ 2025"},
+    {"solar_date": "2026-02-17", "lunar_year": 2026, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Bính Ngọ", "note": "Tết Bính Ngọ 2026"},
+    {"solar_date": "2027-02-06", "lunar_year": 2027, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Đinh Mùi", "note": "Tết Đinh Mùi 2027"},
+    {"solar_date": "2028-01-26", "lunar_year": 2028, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Mậu Thân", "note": "Tết Mậu Thân 2028"},
+    {"solar_date": "2029-02-13", "lunar_year": 2029, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Kỷ Dậu", "note": "Tết Kỷ Dậu 2029"},
+    {"solar_date": "2030-02-02", "lunar_year": 2030, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Canh Tuất", "note": "Tết Canh Tuất 2030 (Việt Nam 02/02/2030 do điểm Sóc lúc 22:25 UTC+7 ngày 02/02, khác Trung Quốc 03/02)"}
+  ],
+  "leap_month_fixtures": [
+    {"solar_date": "2001-05-23", "lunar_year": 2001, "lunar_month": 4, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 4 nhuận 2001 ngày 1"},
+    {"solar_date": "2004-03-21", "lunar_year": 2004, "lunar_month": 2, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 2 nhuận 2004 ngày 1"},
+    {"solar_date": "2006-08-24", "lunar_year": 2006, "lunar_month": 7, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 7 nhuận 2006 ngày 1"},
+    {"solar_date": "2009-06-23", "lunar_year": 2009, "lunar_month": 5, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 5 nhuận 2009 ngày 1"},
+    {"solar_date": "2012-05-21", "lunar_year": 2012, "lunar_month": 4, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 4 nhuận 2012 ngày 1"},
+    {"solar_date": "2014-10-24", "lunar_year": 2014, "lunar_month": 9, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 9 nhuận 2014 ngày 1"},
+    {"solar_date": "2017-07-23", "lunar_year": 2017, "lunar_month": 6, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 6 nhuận 2017 ngày 1"},
+    {"solar_date": "2020-05-23", "lunar_year": 2020, "lunar_month": 4, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 4 nhuận 2020 ngày 1"},
+    {"solar_date": "2020-06-20", "lunar_year": 2020, "lunar_month": 4, "lunar_day": 29, "is_leap_month": true, "note": "Tháng 4 nhuận 2020 ngày 29 (ngày cuối)"},
+    {"solar_date": "2020-06-21", "lunar_year": 2020, "lunar_month": 5, "lunar_day": 1, "is_leap_month": false, "note": "Tháng 5 thường 2020 ngày 1"},
+    {"solar_date": "2023-03-22", "lunar_year": 2023, "lunar_month": 2, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 2 nhuận 2023 ngày 1"},
+    {"solar_date": "2023-04-19", "lunar_year": 2023, "lunar_month": 2, "lunar_day": 29, "is_leap_month": true, "note": "Tháng 2 nhuận 2023 ngày 29 (ngày cuối)"},
+    {"solar_date": "2023-04-20", "lunar_year": 2023, "lunar_month": 3, "lunar_day": 1, "is_leap_month": false, "note": "Tháng 3 thường 2023 ngày 1"},
+    {"solar_date": "2025-07-25", "lunar_year": 2025, "lunar_month": 6, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 6 nhuận 2025 ngày 1"},
+    {"solar_date": "2025-08-22", "lunar_year": 2025, "lunar_month": 6, "lunar_day": 29, "is_leap_month": true, "note": "Tháng 6 nhuận 2025 ngày 29 (ngày cuối)"},
+    {"solar_date": "2025-08-23", "lunar_year": 2025, "lunar_month": 7, "lunar_day": 1, "is_leap_month": false, "note": "Tháng 7 thường 2025 ngày 1"},
+    {"solar_date": "2028-06-23", "lunar_year": 2028, "lunar_month": 5, "lunar_day": 1, "is_leap_month": true, "note": "Tháng 5 nhuận 2028 ngày 1"}
+  ],
+  "traditional_fixtures": [
+    {"solar_date": "2023-02-05", "lunar_year": 2023, "lunar_month": 1, "lunar_day": 15, "is_leap_month": false, "note": "Rằm tháng Giêng 2023"},
+    {"solar_date": "2024-02-24", "lunar_year": 2024, "lunar_month": 1, "lunar_day": 15, "is_leap_month": false, "note": "Rằm tháng Giêng 2024"},
+    {"solar_date": "2025-02-12", "lunar_year": 2025, "lunar_month": 1, "lunar_day": 15, "is_leap_month": false, "note": "Rằm tháng Giêng 2025"},
+    {"solar_date": "2026-03-03", "lunar_year": 2026, "lunar_month": 1, "lunar_day": 15, "is_leap_month": false, "note": "Rằm tháng Giêng 2026"},
+    {"solar_date": "2023-06-02", "lunar_year": 2023, "lunar_month": 4, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Phật Đản 2023 (15/4 AL)"},
+    {"solar_date": "2024-05-22", "lunar_year": 2024, "lunar_month": 4, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Phật Đản 2024 (15/4 AL)"},
+    {"solar_date": "2025-05-12", "lunar_year": 2025, "lunar_month": 4, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Phật Đản 2025 (15/4 AL)"},
+    {"solar_date": "2026-05-31", "lunar_year": 2026, "lunar_month": 4, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Phật Đản 2026 (15/4 AL)"},
+    {"solar_date": "2023-08-30", "lunar_year": 2023, "lunar_month": 7, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Vu Lan 2023 (15/7 AL)"},
+    {"solar_date": "2024-08-18", "lunar_year": 2024, "lunar_month": 7, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Vu Lan 2024 (15/7 AL)"},
+    {"solar_date": "2025-09-06", "lunar_year": 2025, "lunar_month": 7, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Vu Lan 2025 (15/7 AL)"},
+    {"solar_date": "2026-08-27", "lunar_year": 2026, "lunar_month": 7, "lunar_day": 15, "is_leap_month": false, "note": "Đại lễ Vu Lan 2026 (15/7 AL)"},
+    {"solar_date": "2023-09-29", "lunar_year": 2023, "lunar_month": 8, "lunar_day": 15, "is_leap_month": false, "note": "Tết Trung Thu 2023 (15/8 AL)"},
+    {"solar_date": "2024-09-17", "lunar_year": 2024, "lunar_month": 8, "lunar_day": 15, "is_leap_month": false, "note": "Tết Trung Thu 2024 (15/8 AL)"},
+    {"solar_date": "2025-10-06", "lunar_year": 2025, "lunar_month": 8, "lunar_day": 15, "is_leap_month": false, "note": "Tết Trung Thu 2025 (15/8 AL)"},
+    {"solar_date": "2026-09-25", "lunar_year": 2026, "lunar_month": 8, "lunar_day": 15, "is_leap_month": false, "note": "Tết Trung Thu 2026 (15/8 AL)"}
+  ],
+  "boundary_fixtures": [
+    {"solar_date": "1900-01-31", "lunar_year": 1900, "lunar_month": 1, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Canh Tý", "note": "Mốc biên bắt đầu của lịch hỗ trợ"},
+    {"solar_date": "1900-12-31", "lunar_year": 1900, "lunar_month": 11, "lunar_day": 10, "is_leap_month": false, "note": "Cuối năm 1900"},
+    {"solar_date": "2024-02-29", "lunar_year": 2024, "lunar_month": 1, "lunar_day": 20, "is_leap_month": false, "note": "Ngày nhuận dương lịch Gregorian 29/02/2024"},
+    {"solar_date": "2100-12-31", "lunar_year": 2100, "lunar_month": 12, "lunar_day": 1, "is_leap_month": false, "can_chi_year": "Canh Thân", "note": "Mốc biên kết thúc của lịch hỗ trợ"}
+  ]
+}

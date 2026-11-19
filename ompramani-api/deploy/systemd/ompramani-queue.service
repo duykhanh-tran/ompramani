@@ -1,0 +1,18 @@
+[Unit]
+Description=OmPraMani Laravel Queue Worker
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=5s
+WorkingDirectory=/var/www/ompramani/ompramani-api
+ExecStart=/usr/bin/php /var/www/ompramani/ompramani-api/artisan queue:work database --sleep=3 --tries=3 --max-time=3600 --timeout=90
+StandardOutput=append:/var/www/ompramani/ompramani-api/storage/logs/queue.log
+StandardError=append:/var/www/ompramani/ompramani-api/storage/logs/queue-error.log
+
+[Install]
+WantedBy=multi-user.target

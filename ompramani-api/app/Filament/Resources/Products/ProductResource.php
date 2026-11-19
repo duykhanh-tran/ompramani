@@ -1,0 +1,80 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Filament\Resources\Products;
+
+use App\Filament\Resources\Products\Pages\CreateProduct;
+use App\Filament\Resources\Products\Pages\EditProduct;
+use App\Filament\Resources\Products\Pages\ListProducts;
+use App\Filament\Resources\Products\Pages\ViewProduct;
+use App\Filament\Resources\Products\Schemas\ProductForm;
+use App\Filament\Resources\Products\Tables\ProductsTable;
+use App\Models\Product;
+use BackedEnum;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use UnitEnum;
+
+class ProductResource extends Resource
+{
+    protected static ?string $model = Product::class;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Cửa hàng';
+
+    protected static ?string $modelLabel = 'Vật phẩm';
+
+    protected static ?string $pluralModelLabel = 'Vật phẩm Phật giáo';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingStorefront;
+
+    protected static ?int $navigationSort = 30;
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->role === 'admin';
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->role === 'admin';
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->user()?->role === 'admin';
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return auth()->user()?->role === 'admin';
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return ProductForm::configure($schema);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return ProductsTable::configure($table);
+    }
+
+    public static function getRelations(): array
+    {
+        return [];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListProducts::route('/'),
+            'create' => CreateProduct::route('/create'),
+            'view' => ViewProduct::route('/{record}'),
+            'edit' => EditProduct::route('/{record}/edit'),
+        ];
+    }
+}
