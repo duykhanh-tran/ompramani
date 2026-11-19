@@ -31,8 +31,16 @@ RUN composer install \
 # Copy application source code
 COPY . .
 
-# Generate optimized autoload classmap
-RUN composer dump-autoload --optimize --no-dev --classmap-authoritative
+# Ensure storage framework directories exist before generating classmap
+RUN mkdir -p storage/framework/cache/data \
+             storage/framework/sessions \
+             storage/framework/views \
+             storage/logs \
+             bootstrap/cache
+
+# Generate optimized autoload classmap without running scripts in builder
+# (Artisan scripts and Filament asset compilation run in Stage 2 with full PHP 8.4 extensions)
+RUN composer dump-autoload --optimize --no-dev --classmap-authoritative --no-scripts
 
 # ------------------------------------------------------------------------------
 # STAGE 2: PRODUCTION RUNTIME
@@ -93,10 +101,24 @@ COPY --from=composer-stage /app /var/www/html
 COPY deploy/render/nginx.conf /etc/nginx/templates/default.conf.template
 COPY deploy/render/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Fix permissions and executable flags
-RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+# Create all writable storage and cache directories
+RUN mkdir -p /var/www/html/storage/framework/cache/data \
+             /var/www/html/storage/framework/sessions \
+             /var/www/html/storage/framework/views \
+             /var/www/html/storage/logs \
+             /var/www/html/bootstrap/cache \
+             /var/www/html/public/css/filament \
+             /var/www/html/public/js/filament \
+             /var/www/html/public/fonts/filament \
+    && chmod +x /usr/local/bin/entrypoint.sh \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/public \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Run Laravel package discovery & Filament 5 asset publishing inside full PHP 8.4 runtime
+# (This bakes all compiled Filament CSS, JS, and font assets into the final image)
+RUN php artisan package:discover --ansi \
+    && php artisan filament:upgrade \
+    && chown -R www-data:www-data /var/www/html/public
 
 # Render default port
 EXPOSE 10000
