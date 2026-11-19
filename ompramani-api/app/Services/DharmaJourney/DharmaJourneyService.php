@@ -6,6 +6,7 @@ use App\Enums\PracticeSessionStatus;
 use App\Enums\PracticeType;
 use App\Models\PracticeSession;
 use App\Models\User;
+use App\Rules\ValidTimezone;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Support\Collection;
@@ -35,15 +36,14 @@ class DharmaJourneyService
         }
 
         $trimmed = trim($tz);
-        try {
-            $tzObj = new DateTimeZone($trimmed);
 
-            return $tzObj->getName();
-        } catch (\Throwable) {
+        if (! ValidTimezone::isValid($trimmed)) {
             throw ValidationException::withMessages([
                 'timezone' => "Múi giờ '{$tz}' không hợp lệ theo chuẩn IANA.",
             ]);
         }
+
+        return $trimmed;
     }
 
     /**
@@ -80,7 +80,8 @@ class DharmaJourneyService
      */
     public function calculateBoundaries(string $range, string $timezone): array
     {
-        $nowLocal = CarbonImmutable::now($timezone);
+        $calcTz = ValidTimezone::canonicalize($timezone);
+        $nowLocal = CarbonImmutable::now($calcTz);
         $todayStartLocal = $nowLocal->startOfDay();
         $endLocal = $todayStartLocal->addDay(); // Next local midnight (exclusive)
         $endUtc = $endLocal->setTimezone('UTC');
@@ -446,12 +447,13 @@ class DharmaJourneyService
         CarbonImmutable $endLocal,
         string $range
     ): array {
+        $calcTz = ValidTimezone::canonicalize($tz);
         $buckets = [];
         foreach ($sessions as $session) {
             if (! $session->ended_at) {
                 continue;
             }
-            $dateStr = $session->ended_at->setTimezone($tz)->format('Y-m-d');
+            $dateStr = $session->ended_at->setTimezone($calcTz)->format('Y-m-d');
             if (! isset($buckets[$dateStr])) {
                 $buckets[$dateStr] = [
                     'completed_sessions' => 0,
@@ -491,6 +493,7 @@ class DharmaJourneyService
      */
     protected function buildMonthlyActivityPoints($sessions, string $tz, CarbonImmutable $endLocal): array
     {
+        $calcTz = ValidTimezone::canonicalize($tz);
         $buckets = [];
         $earliestLocal = $endLocal->subMonths(6)->startOfMonth();
 
@@ -498,7 +501,7 @@ class DharmaJourneyService
             if (! $session->ended_at) {
                 continue;
             }
-            $sessionLocal = $session->ended_at->setTimezone($tz);
+            $sessionLocal = $session->ended_at->setTimezone($calcTz);
             $monthKey = $sessionLocal->format('Y-m');
 
             if (! isset($buckets[$monthKey])) {

@@ -6,6 +6,7 @@ use App\Enums\PracticeSessionStatus;
 use App\Enums\PracticeType;
 use App\Models\PracticeSession;
 use App\Models\User;
+use App\Rules\ValidTimezone;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Validation\ValidationException;
@@ -35,21 +36,19 @@ class PracticeStreakService
     {
         if ($timezone !== null && trim($timezone) !== '') {
             $trimmed = trim($timezone);
-            try {
-                return (new DateTimeZone($trimmed))->getName();
-            } catch (\Throwable) {
+            if (! ValidTimezone::isValid($trimmed)) {
                 throw ValidationException::withMessages([
                     'timezone' => "Múi giờ '{$timezone}' không hợp lệ theo chuẩn IANA.",
                 ]);
             }
+
+            return $trimmed;
         }
 
         if ($user && $user->profile && ! empty($user->profile->timezone)) {
             $userTz = trim($user->profile->timezone);
-            try {
-                return (new DateTimeZone($userTz))->getName();
-            } catch (\Throwable) {
-                // fall through to default
+            if (ValidTimezone::isValid($userTz)) {
+                return $userTz;
             }
         }
 
@@ -87,6 +86,7 @@ class PracticeStreakService
     public function calculateStreak(User $user, int|string|null $days = 30, ?string $timezone = null): array
     {
         $resolvedTz = $this->resolveTimezone($user, $timezone);
+        $calcTz = ValidTimezone::canonicalize($resolvedTz);
         $resolvedDays = $this->resolveDays($days);
 
         // Fetch completed sessions with completion timestamps and metrics
@@ -106,7 +106,7 @@ class PracticeStreakService
                 continue;
             }
 
-            $localDateStr = $session->ended_at->setTimezone($resolvedTz)->format('Y-m-d');
+            $localDateStr = $session->ended_at->setTimezone($calcTz)->format('Y-m-d');
             $distinctDatesCounts[$localDateStr] = ($distinctDatesCounts[$localDateStr] ?? 0) + 1;
         }
 
@@ -114,7 +114,7 @@ class PracticeStreakService
         sort($sortedAscDates);
 
         // Local today & yesterday
-        $nowLocal = CarbonImmutable::now($resolvedTz);
+        $nowLocal = CarbonImmutable::now($calcTz);
         $todayLocal = $nowLocal->startOfDay();
         $todayStr = $todayLocal->format('Y-m-d');
         $yesterdayStr = $todayLocal->subDays(1)->format('Y-m-d');
