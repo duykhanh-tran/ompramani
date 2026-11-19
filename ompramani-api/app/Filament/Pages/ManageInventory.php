@@ -58,7 +58,7 @@ class ManageInventory extends Page implements HasTable
             ->columns([
                 ImageColumn::make('cover_image')
                     ->label('Ảnh')
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->square()
                     ->defaultImageUrl('/images/product-placeholder.png'),
 

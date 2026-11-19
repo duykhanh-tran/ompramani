@@ -20,7 +20,7 @@ class BuddhistFiguresTable
                 ImageColumn::make('thumbnail')
                     ->label('Ảnh')
                     ->circular()
-                    ->disk('public'),
+                    ->disk((string) config('filesystems.public_disk', 'public')),
 
                 TextColumn::make('name')
                     ->label('Danh hiệu')

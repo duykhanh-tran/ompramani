@@ -173,7 +173,8 @@ class ShopProductController extends Controller
                 if (Str::startsWith($product->cover_image, ['http://', 'https://', '/'])) {
                     $imageUrl = $product->cover_image;
                 } else {
-                    $imageUrl = Storage::disk('public')->url($product->cover_image);
+                    $publicDisk = (string) config('filesystems.public_disk', 'public');
+                    $imageUrl = Storage::disk($publicDisk)->url($product->cover_image);
                 }
             }
 

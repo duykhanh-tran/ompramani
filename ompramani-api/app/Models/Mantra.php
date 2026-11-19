@@ -56,7 +56,9 @@ class Mantra extends Model
             return $this->audio_path;
         }
 
-        return Storage::disk('public')->url($this->audio_path);
+        $disk = (string) config('filesystems.public_disk', 'public');
+
+        return Storage::disk($disk)->url($this->audio_path);
     }
 
     public function tradition(): BelongsTo

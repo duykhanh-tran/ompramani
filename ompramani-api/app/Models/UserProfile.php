@@ -59,7 +59,9 @@ class UserProfile extends Model
                 return $this->avatar;
             }
 
-            return Storage::disk('public')->url($this->avatar);
+            $disk = (string) config('filesystems.public_disk', 'public');
+
+            return Storage::disk($disk)->url($this->avatar);
         });
     }
 }

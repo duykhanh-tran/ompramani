@@ -123,9 +123,10 @@ class ShopOrderController extends Controller
 
             $imageUrl = null;
             if (! empty($product->primary_image)) {
+                $publicDisk = (string) config('filesystems.public_disk', 'public');
                 $imageUrl = str_starts_with($product->primary_image, 'http')
                     ? $product->primary_image
-                    : Storage::disk('public')->url($product->primary_image);
+                    : Storage::disk($publicDisk)->url($product->primary_image);
             }
 
             $previewItems[] = [

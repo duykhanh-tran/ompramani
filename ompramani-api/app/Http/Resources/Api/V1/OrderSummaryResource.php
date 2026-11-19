@@ -29,7 +29,8 @@ class OrderSummaryResource extends JsonResource
             if (Str::startsWith($firstItem->product_image_snapshot, ['http://', 'https://', '/'])) {
                 $firstItemImage = $firstItem->product_image_snapshot;
             } else {
-                $firstItemImage = Storage::disk('public')->url($firstItem->product_image_snapshot);
+                $publicDisk = (string) config('filesystems.public_disk', 'public');
+                $firstItemImage = Storage::disk($publicDisk)->url($firstItem->product_image_snapshot);
             }
         }
 

@@ -92,7 +92,7 @@ class SutraForm
                 FileUpload::make('thumbnail')
                     ->label('Ảnh đại diện')
                     ->image()
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('sutras/thumbnails')
                     ->maxSize(5120)
                     ->helperText('Tải ảnh đại diện từ máy tính (định dạng JPG, PNG, WEBP, tối đa 5MB).'),

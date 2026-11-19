@@ -96,9 +96,10 @@ class ProfileController extends Controller
 
         $file = $request->file('avatar');
         $oldAvatar = $profile->avatar;
+        $publicDisk = (string) config('filesystems.public_disk', 'public');
 
         // Store with randomized hash name in public avatars directory
-        $newPath = $file->store('avatars', 'public');
+        $newPath = $file->store('avatars', $publicDisk);
 
         if (! $newPath) {
             return response()->json([
@@ -111,8 +112,8 @@ class ProfileController extends Controller
         ]);
 
         // Clean up old avatar if exists
-        if ($oldAvatar && Storage::disk('public')->exists($oldAvatar)) {
-            Storage::disk('public')->delete($oldAvatar);
+        if ($oldAvatar && Storage::disk($publicDisk)->exists($oldAvatar)) {
+            Storage::disk($publicDisk)->delete($oldAvatar);
         }
 
         $user->load('profile.preferredTradition');
@@ -121,7 +122,7 @@ class ProfileController extends Controller
             'message' => 'Đã cập nhật ảnh đại diện thành công.',
             'data' => [
                 'avatar' => $newPath,
-                'avatar_url' => Storage::disk('public')->url($newPath),
+                'avatar_url' => Storage::disk($publicDisk)->url($newPath),
                 'user' => new UserResource($user),
             ],
         ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -138,12 +139,13 @@ class ProfileController extends Controller
 
         if ($profile && $profile->avatar) {
             $oldAvatar = $profile->avatar;
+            $publicDisk = (string) config('filesystems.public_disk', 'public');
             $profile->update([
                 'avatar' => null,
             ]);
 
-            if (Storage::disk('public')->exists($oldAvatar)) {
-                Storage::disk('public')->delete($oldAvatar);
+            if (Storage::disk($publicDisk)->exists($oldAvatar)) {
+                Storage::disk($publicDisk)->delete($oldAvatar);
             }
         }
 

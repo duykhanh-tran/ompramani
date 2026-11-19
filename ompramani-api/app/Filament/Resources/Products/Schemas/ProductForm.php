@@ -99,7 +99,7 @@ class ProductForm
                 FileUpload::make('cover_image')
                     ->label('Ảnh minh họa chính')
                     ->image()
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('products')
                     ->maxSize(5120)
                     ->helperText('Định dạng hình ảnh JPG, PNG, WEBP (tối đa 5MB).'),

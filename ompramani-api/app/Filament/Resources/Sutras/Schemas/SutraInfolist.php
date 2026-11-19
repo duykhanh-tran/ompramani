@@ -14,7 +14,7 @@ class SutraInfolist
             ->components([
                 ImageEntry::make('thumbnail')
                     ->label('Ảnh đại diện')
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->square(),
                 TextEntry::make('title')
                     ->label('Tên kinh')

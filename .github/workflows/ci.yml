@@ -1,0 +1,114 @@
+name: OmPraMani Pre-Deployment CI & Security Gates
+
+on:
+  push:
+    branches: [main, master, staging]
+  pull_request:
+    branches: [main, master, staging]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-quality-and-security:
+    name: Backend (Laravel 13 & PHP 8.4)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: ompramani_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: secret_testing_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP Runtime
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_pgsql, pgsql, bcmath, ctype, json, tokenizer, xml
+          coverage: none
+
+      - name: Validate composer.json
+        run: |
+          cd ompramani-api
+          composer validate --strict
+
+      - name: Cache Composer Dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: ${{ runner.os }}-composer-${{ hashFiles('ompramani-api/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install Dependencies
+        run: |
+          cd ompramani-api
+          composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Security Vulnerability Audit
+        run: |
+          cd ompramani-api
+          composer audit
+
+      - name: Run Backend Tests
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: ompramani_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: secret_testing_password
+          APP_KEY: base64:0123456789012345678901234567890123456789012=
+        run: |
+          cd ompramani-api
+          php artisan test
+
+  frontend-quality-and-security:
+    name: Frontend (Next.js 16 & React 19)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'ompramani-web/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd ompramani-web
+          npm ci
+
+      - name: Type Check (TypeScript)
+        run: |
+          cd ompramani-web
+          npx tsc --noEmit
+
+      - name: Linting (ESLint)
+        run: |
+          cd ompramani-web
+          npm run lint
+
+      - name: Production Build Compilation
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.ompramani.vn
+          NEXT_PUBLIC_INDEXING_ENABLED: false
+        run: |
+          cd ompramani-web
+          npm run build

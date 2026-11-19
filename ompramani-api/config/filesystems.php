@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Logical Disk Selectors (Local vs Cloudflare R2)
+    |--------------------------------------------------------------------------
+    |
+    | Define which disk handles public assets (images, audio, thumbnails)
+    | and which disk handles private assets (source docx/pdf, backups).
+    | Default to local storage in development; set to r2_public / r2_private
+    | in production once credentials are confirmed.
+    |
+    */
+    'public_disk' => env('FILESYSTEM_PUBLIC_DISK', 'public'),
+    'private_disk' => env('FILESYSTEM_PRIVATE_DISK', 'local'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |
@@ -58,6 +72,33 @@ return [
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
             'report' => false,
+        ],
+
+        'r2_public' => [
+            'driver' => 's3',
+            'key' => env('R2_PUBLIC_ACCESS_KEY_ID'),
+            'secret' => env('R2_PUBLIC_SECRET_ACCESS_KEY'),
+            'region' => env('R2_PUBLIC_DEFAULT_REGION', 'auto'),
+            'bucket' => env('R2_PUBLIC_BUCKET', 'ompramani-public'),
+            'url' => env('R2_PUBLIC_URL'),
+            'endpoint' => env('R2_PUBLIC_ENDPOINT'),
+            'use_path_style_endpoint' => env('R2_PUBLIC_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+            'visibility' => 'public',
+        ],
+
+        'r2_private' => [
+            'driver' => 's3',
+            'key' => env('R2_PRIVATE_ACCESS_KEY_ID'),
+            'secret' => env('R2_PRIVATE_SECRET_ACCESS_KEY'),
+            'region' => env('R2_PRIVATE_DEFAULT_REGION', 'auto'),
+            'bucket' => env('R2_PRIVATE_BUCKET', 'ompramani-private'),
+            'endpoint' => env('R2_PRIVATE_ENDPOINT'),
+            'use_path_style_endpoint' => env('R2_PRIVATE_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+            'visibility' => 'private',
         ],
 
     ],

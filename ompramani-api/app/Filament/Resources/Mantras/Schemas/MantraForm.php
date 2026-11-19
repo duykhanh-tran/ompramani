@@ -77,7 +77,7 @@ class MantraForm
                 // Dòng 6: Audio trì niệm (duy nhất 1 file audio)
                 FileUpload::make('audio_path')
                     ->label('Audio trì niệm')
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('mantras/audio')
                     ->maxSize(30720)
                     ->acceptedFileTypes([

@@ -91,7 +91,7 @@ class BuddhistFigureForm
                         FileUpload::make('thumbnail')
                             ->label('Ảnh đại diện')
                             ->image()
-                            ->disk('public')
+                            ->disk((string) config('filesystems.public_disk', 'public'))
                             ->directory('buddhist-figures')
                             ->maxSize(5120)
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])

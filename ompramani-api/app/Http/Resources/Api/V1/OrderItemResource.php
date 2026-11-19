@@ -25,7 +25,8 @@ class OrderItemResource extends JsonResource
             if (Str::startsWith($this->product_image_snapshot, ['http://', 'https://', '/'])) {
                 $imageUrl = $this->product_image_snapshot;
             } else {
-                $imageUrl = Storage::disk('public')->url($this->product_image_snapshot);
+                $publicDisk = (string) config('filesystems.public_disk', 'public');
+                $imageUrl = Storage::disk($publicDisk)->url($this->product_image_snapshot);
             }
         }
 

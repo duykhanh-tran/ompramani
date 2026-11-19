@@ -25,7 +25,8 @@ class ProductDetailResource extends JsonResource
             if (Str::startsWith($this->cover_image, ['http://', 'https://', '/'])) {
                 $imageUrl = $this->cover_image;
             } else {
-                $imageUrl = Storage::disk('public')->url($this->cover_image);
+                $publicDisk = (string) config('filesystems.public_disk', 'public');
+                $imageUrl = Storage::disk($publicDisk)->url($this->cover_image);
             }
         }
 

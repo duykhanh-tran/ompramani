@@ -1,0 +1,94 @@
+# ==============================================================================
+# RENDER PRODUCTION ENVIRONMENT CONFIGURATION TEMPLATE
+# OmPraMani Laravel 13 API Web Service (Docker on Render)
+# ==============================================================================
+# Instructions:
+# 1. In Render Dashboard -> Your Web Service -> Environment -> Add Environment Variable.
+# 2. Add each variable below with your actual values from Neon, Cloudflare, and SePay.
+# 3. DO NOT COMMIT REAL SECRETS OR PASSWORDS TO GITHUB.
+# ==============================================================================
+
+# --- Application Core ---
+APP_NAME=OmPraMani
+APP_ENV=production
+APP_KEY=base64:GENERATE_NEW_UNIQUE_KEY_FOR_PRODUCTION_SERVER
+APP_DEBUG=false
+APP_URL=https://api.ompramani.vn
+APP_FRONTEND_URL=https://ompramani.vn
+
+APP_LOCALE=vi
+APP_FALLBACK_LOCALE=vi
+APP_FAKER_LOCALE=vi_VN
+BCRYPT_ROUNDS=12
+
+# --- Logging ---
+LOG_CHANNEL=daily
+LOG_LEVEL=warning
+LOG_DAILY_DAYS=14
+
+# --- Neon PostgreSQL Database ---
+# Note: Neon requires SSL (sslmode=require).
+# For web queries, use Neon pooled connection host (ep-xxxx-pooler...).
+# For running migrations, use Neon direct connection host.
+DB_CONNECTION=pgsql
+DB_HOST=ep-xxxx-pooler.ap-southeast-1.aws.neon.tech
+DB_PORT=5432
+DB_DATABASE=neondb
+DB_USERNAME=REPLACE_WITH_NEON_USER
+DB_PASSWORD=REPLACE_WITH_NEON_PASSWORD
+DB_SSLMODE=require
+
+# Alternatively, if using Neon connection URL:
+# DB_URL=postgresql://user:password@ep-xxxx-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+
+# --- Sessions, Cache & Queue (Using Neon PostgreSQL backend) ---
+SESSION_DRIVER=database
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=true
+SESSION_DOMAIN=.ompramani.vn
+SESSION_SECURE_COOKIE=true
+SESSION_HTTP_ONLY=true
+SESSION_SAME_SITE=lax
+
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+BROADCAST_CONNECTION=log
+
+# --- Filesystem Disks (Cloudflare R2) ---
+# Direct all persistent uploads to Cloudflare R2 (Render disk is ephemeral)
+FILESYSTEM_DISK=r2_public
+FILESYSTEM_PUBLIC_DISK=r2_public
+FILESYSTEM_PRIVATE_DISK=r2_private
+
+# Cloudflare R2 — Public Bucket (ompramani-public)
+# Permissions: Object Read & Write scoped to ompramani-public only
+R2_PUBLIC_ACCESS_KEY_ID=REPLACE_WITH_R2_PUBLIC_ACCESS_KEY_ID
+R2_PUBLIC_SECRET_ACCESS_KEY=REPLACE_WITH_R2_PUBLIC_SECRET_ACCESS_KEY
+R2_PUBLIC_BUCKET=ompramani-public
+R2_PUBLIC_ENDPOINT=https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com
+R2_PUBLIC_URL=https://media.ompramani.vn
+R2_PUBLIC_DEFAULT_REGION=auto
+R2_PUBLIC_USE_PATH_STYLE_ENDPOINT=false
+
+# Cloudflare R2 — Private Bucket (ompramani-private)
+# Permissions: Object Read & Write scoped to ompramani-private only
+R2_PRIVATE_ACCESS_KEY_ID=REPLACE_WITH_R2_PRIVATE_ACCESS_KEY_ID
+R2_PRIVATE_SECRET_ACCESS_KEY=REPLACE_WITH_R2_PRIVATE_SECRET_ACCESS_KEY
+R2_PRIVATE_BUCKET=ompramani-private
+R2_PRIVATE_ENDPOINT=https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com
+R2_PRIVATE_DEFAULT_REGION=auto
+R2_PRIVATE_USE_PATH_STYLE_ENDPOINT=false
+
+# --- CORS & Sanctum Security ---
+CORS_ALLOWED_ORIGINS=https://ompramani.vn
+SANCTUM_STATEFUL_DOMAINS=ompramani.vn
+
+# --- SePay Payment Gateway (Production / Sandbox) ---
+# Keep 'sandbox' until production launch is formally authorized.
+SEPAY_ENVIRONMENT=sandbox
+SEPAY_MERCHANT_ID=REPLACE_WITH_SEPAY_MERCHANT_ID
+SEPAY_MERCHANT_SECRET_KEY=REPLACE_WITH_SEPAY_SECRET_KEY
+SEPAY_IPN_SECRET_KEY=REPLACE_WITH_SEPAY_IPN_KEY
+SEPAY_SUCCESS_URL=https://ompramani.vn/don-hang/{publicId}/ket-qua?invoice={invoice}
+SEPAY_CANCEL_URL=https://ompramani.vn/don-hang/{publicId}/ket-qua?invoice={invoice}&status=cancelled
+SEPAY_ERROR_URL=https://ompramani.vn/don-hang/{publicId}/ket-qua?invoice={invoice}&status=error

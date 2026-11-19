@@ -19,7 +19,7 @@ class ArticlesTable
             ->columns([
                 ImageColumn::make('cover_image')
                     ->label('Ảnh bìa')
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->square()
                     ->toggleable(),
 

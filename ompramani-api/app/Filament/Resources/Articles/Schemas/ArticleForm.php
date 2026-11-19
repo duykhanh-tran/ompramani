@@ -55,7 +55,7 @@ class ArticleForm
                 FileUpload::make('cover_image')
                     ->label('Ảnh bìa')
                     ->image()
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('articles/covers')
                     ->maxSize(5120)
                     ->imagePreviewHeight('180')

@@ -86,7 +86,7 @@ class TempleForm
                 FileUpload::make('cover_image')
                     ->label('Ảnh')
                     ->image()
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('temples/covers')
                     ->maxSize(5120)
                     ->imagePreviewHeight('200')

@@ -60,7 +60,9 @@ class RecitationAudio extends Model
                 return $this->file_path;
             }
 
-            return Storage::disk('public')->url($this->file_path);
+            $disk = (string) config('filesystems.public_disk', 'public');
+
+            return Storage::disk($disk)->url($this->file_path);
         }
 
         return '';

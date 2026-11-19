@@ -1,0 +1,54 @@
+# ==============================================================================
+# DOCKERIGNORE: OMPRAMANI LARAVEL API
+# Prevent secrets, local caches, vendor, and sensitive data from leaking into image
+# ==============================================================================
+
+# Secrets and environment files
+.env
+.env.*
+.env.backup
+.env.production
+auth.json
+
+# Local dependency directories (installed inside image instead)
+vendor/
+node_modules/
+
+# Local storage and file caches
+storage/*.key
+storage/app/*
+!storage/app/.gitignore
+storage/framework/cache/*
+!storage/framework/cache/.gitignore
+storage/framework/sessions/*
+!storage/framework/sessions/.gitignore
+storage/framework/views/*
+!storage/framework/views/.gitignore
+storage/logs/*
+!storage/logs/.gitignore
+
+# Git and CI
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Test caches and results
+.phpunit.cache/
+.phpunit.result.cache
+tests/
+
+# Editor and IDE metadata
+.idea/
+.vscode/
+.nova/
+.zed/
+.cursor/
+*.log
+Thumbs.db
+.DS_Store
+
+# Local SQLite databases
+database/*.sqlite
+database/*.sqlite-journal
+database/*.sqlite3

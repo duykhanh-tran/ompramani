@@ -18,7 +18,7 @@ class SutrasTable
             ->columns([
                 ImageColumn::make('thumbnail')
                     ->label('Ảnh')
-                    ->disk('public')
+                    ->disk((string) config('filesystems.public_disk', 'public'))
                     ->square()
                     ->toggleable(),
                 TextColumn::make('title')
