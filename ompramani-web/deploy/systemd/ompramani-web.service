@@ -1,0 +1,21 @@
+[Unit]
+Description=OmPraMani Next.js Web Application
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=5s
+WorkingDirectory=/var/www/ompramani/ompramani-web
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+# When built with standalone output:
+ExecStart=/usr/bin/node /var/www/ompramani/ompramani-web/.next/standalone/server.js
+StandardOutput=append:/var/log/ompramani-web.log
+StandardError=append:/var/log/ompramani-web-error.log
+
+[Install]
+WantedBy=multi-user.target
