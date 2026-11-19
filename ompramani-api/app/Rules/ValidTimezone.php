@@ -8,6 +8,15 @@ use Illuminate\Contracts\Validation\ValidationRule;
 
 class ValidTimezone implements ValidationRule
 {
+    /**
+     * Map of legacy or regional aliases to canonical calculation timezones.
+     *
+     * @var array<string, string>
+     */
+    public const ALIAS_MAP = [
+        'Asia/Saigon' => 'Asia/Ho_Chi_Minh',
+    ];
+
     public function __construct(
         protected ?string $customMessage = null
     ) {}
@@ -49,20 +58,24 @@ class ValidTimezone implements ValidationRule
             return false;
         }
 
-        // Fast path 1: Standard IANA timezone list including backward-compatibility aliases
-        if (in_array($trimmed, DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true)) {
+        // Fast path 1: Known regional alias map
+        if (isset(self::ALIAS_MAP[$trimmed])) {
             return true;
         }
 
-        // Fast path 2: Standard legacy / regional aliases
+        // Fast path 2: Standard common timezones
         $commonAliases = [
-            'Asia/Saigon',
             'Asia/Ho_Chi_Minh',
             'UTC',
             'GMT',
         ];
 
         if (in_array($trimmed, $commonAliases, true)) {
+            return true;
+        }
+
+        // Fast path 3: Standard IANA timezone list including backward-compatibility aliases
+        if (in_array($trimmed, DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true)) {
             return true;
         }
 
@@ -75,5 +88,19 @@ class ValidTimezone implements ValidationRule
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Resolve a canonical calculation timezone identifier supported safely across all PHP/OS runtimes.
+     */
+    public static function canonicalize(string $timezone): string
+    {
+        $trimmed = trim($timezone);
+
+        if (isset(self::ALIAS_MAP[$trimmed])) {
+            return self::ALIAS_MAP[$trimmed];
+        }
+
+        return $trimmed;
     }
 }
