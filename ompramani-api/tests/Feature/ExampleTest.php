@@ -8,12 +8,22 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     /**
-     * A basic test example.
+     * Root URL redirects directly to Filament Admin.
      */
-    public function test_the_application_returns_a_successful_response(): void
+    public function test_the_application_redirects_root_to_admin(): void
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        $response->assertRedirect('/admin');
+    }
+
+    /**
+     * Accidental browser URL prefix typos redirect gracefully to intended destination.
+     */
+    public function test_accidental_url_typos_redirect_to_target(): void
+    {
+        $response = $this->get('/https:/admin/login');
+
+        $response->assertRedirect('/admin/login');
     }
 }
