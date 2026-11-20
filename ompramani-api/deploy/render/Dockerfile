@@ -110,14 +110,16 @@ RUN mkdir -p /var/www/html/storage/framework/cache/data \
              /var/www/html/public/css/filament \
              /var/www/html/public/js/filament \
              /var/www/html/public/fonts/filament \
+             /var/www/html/public/vendor/livewire \
     && chmod +x /usr/local/bin/entrypoint.sh \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/public \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Run Laravel package discovery & Filament 5 asset publishing inside full PHP 8.4 runtime
-# (This bakes all compiled Filament CSS, JS, and font assets into the final image)
+# Run Laravel package discovery, Filament 5 & Livewire 4 asset publishing inside full PHP 8.4 runtime
+# (This bakes all compiled Filament CSS, JS, fonts, and Livewire frontend assets into the final image)
 RUN php artisan package:discover --ansi \
     && php artisan filament:upgrade \
+    && php artisan livewire:publish --assets \
     && chown -R www-data:www-data /var/www/html/public
 
 # Render default port
