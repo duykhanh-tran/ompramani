@@ -29,6 +29,12 @@ if [ -n "$APP_KEY" ]; then
     php artisan view:cache --ansi || true
 fi
 
+# Run database migrations if AUTO_MIGRATE or RUN_MIGRATIONS is set
+if [ "$AUTO_MIGRATE" = "true" ] || [ "$RUN_MIGRATIONS" = "true" ]; then
+    echo "==> Running database migrations on production database..."
+    php artisan migrate --force || true
+fi
+
 # Ensure storage link exists
 php artisan storage:link --force || true
 
