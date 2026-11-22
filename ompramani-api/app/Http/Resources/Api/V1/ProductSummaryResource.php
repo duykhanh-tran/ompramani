@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Product;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -20,15 +20,7 @@ class ProductSummaryResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $imageUrl = null;
-        if (! empty($this->cover_image)) {
-            if (Str::startsWith($this->cover_image, ['http://', 'https://', '/'])) {
-                $imageUrl = $this->cover_image;
-            } else {
-                $publicDisk = (string) config('filesystems.public_disk', 'public');
-                $imageUrl = Storage::disk($publicDisk)->url($this->cover_image);
-            }
-        }
+        $imageUrl = MediaUrlResolver::resolve($this->cover_image);
 
         return [
             'public_id' => $this->public_id,

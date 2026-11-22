@@ -101,6 +101,21 @@ return [
             'visibility' => 'private',
         ],
 
+        'cloudinary' => [
+            'driver' => 'cloudinary',
+            'api_key' => env('CLOUDINARY_API_KEY'),
+            'api_secret' => env('CLOUDINARY_API_SECRET'),
+            'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
+            'url' => env('CLOUDINARY_URL'),
+            'secure_url' => (bool) env('CLOUDINARY_SECURE_URL', true),
+            'options' => [
+                'resource_type' => 'auto',
+            ],
+            'throw' => false,
+            'report' => false,
+            'visibility' => 'public',
+        ],
+
     ],
 
     /*
