@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublishedScope;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -52,13 +53,7 @@ class Mantra extends Model
             return null;
         }
 
-        if (str_starts_with($this->audio_path, 'http://') || str_starts_with($this->audio_path, 'https://')) {
-            return $this->audio_path;
-        }
-
-        $disk = (string) config('filesystems.public_disk', 'public');
-
-        return Storage::disk($disk)->url($this->audio_path);
+        return MediaUrlResolver::resolve($this->audio_path);
     }
 
     public function tradition(): BelongsTo

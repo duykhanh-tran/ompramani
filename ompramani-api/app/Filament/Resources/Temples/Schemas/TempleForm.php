@@ -115,12 +115,16 @@ class TempleForm
                 // Dòng 8: Lịch sử hình thành (full width)
                 RichEditor::make('history')
                     ->label('Lịch sử hình thành')
+                    ->fileAttachmentsDisk((string) config('filesystems.public_disk', 'public'))
+                    ->fileAttachmentsDirectory('temples/content')
                     ->columnSpanFull()
                     ->nullable(),
 
                 // Dòng 9: Kiến trúc – Không gian và Giá trị văn hóa (full width)
                 RichEditor::make('architecture_culture')
                     ->label('Kiến trúc – Không gian và Giá trị văn hóa')
+                    ->fileAttachmentsDisk((string) config('filesystems.public_disk', 'public'))
+                    ->fileAttachmentsDirectory('temples/content')
                     ->columnSpanFull()
                     ->nullable(),
             ]);

@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Article;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Str;
@@ -25,7 +26,7 @@ class ArticleDetailResource extends JsonResource
             'title' => $art->title,
             'slug' => $art->slug,
             'excerpt' => $art->excerpt ?: Str::limit(strip_tags($art->content), 180),
-            'cover_image' => $art->cover_image,
+            'cover_image' => MediaUrlResolver::resolve($art->cover_image),
             'published_at' => $art->published_at?->toISOString(),
         ])->all();
 
@@ -37,7 +38,7 @@ class ArticleDetailResource extends JsonResource
             'slug' => $this->slug,
             'excerpt' => $this->excerpt ?: Str::limit($plainContent, 180),
             'content' => $this->content,
-            'cover_image' => $this->cover_image,
+            'cover_image' => MediaUrlResolver::resolve($this->cover_image),
             'category' => $this->category ? [
                 'id' => $this->category->id,
                 'name' => $this->category->name,

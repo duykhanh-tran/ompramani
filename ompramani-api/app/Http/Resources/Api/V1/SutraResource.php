@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Sutra;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -30,7 +31,7 @@ class SutraResource extends JsonResource
             'source' => $this->source,
             'notes' => $this->notes,
             'short_description' => $this->short_description,
-            'thumbnail' => $this->thumbnail,
+            'thumbnail' => MediaUrlResolver::resolve($this->thumbnail),
             'tradition' => new TraditionResource($this->whenLoaded('tradition')),
             'versions' => SutraVersionResource::collection($this->whenLoaded('versions')),
         ];

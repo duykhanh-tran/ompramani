@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\BuddhistFigures\Tables;
 
+use App\Services\Media\MediaUrlResolver;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -20,7 +21,10 @@ class BuddhistFiguresTable
                 ImageColumn::make('thumbnail')
                     ->label('Ảnh')
                     ->circular()
-                    ->disk((string) config('filesystems.public_disk', 'public')),
+                    ->visibility('public')
+                    ->checkFileExistence(false)
+                    ->disk((string) config('filesystems.public_disk', 'public'))
+                    ->state(fn ($record): ?string => MediaUrlResolver::resolve($record->thumbnail)),
 
                 TextColumn::make('name')
                     ->label('Danh hiệu')

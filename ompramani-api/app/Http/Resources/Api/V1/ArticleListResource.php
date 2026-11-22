@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Article;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Str;
@@ -26,7 +27,7 @@ class ArticleListResource extends JsonResource
             'title' => $this->title,
             'slug' => $this->slug,
             'excerpt' => $this->excerpt ?: Str::limit($plainContent, 180),
-            'cover_image' => $this->cover_image,
+            'cover_image' => MediaUrlResolver::resolve($this->cover_image),
             'category' => $this->category ? [
                 'id' => $this->category->id,
                 'name' => $this->category->name,

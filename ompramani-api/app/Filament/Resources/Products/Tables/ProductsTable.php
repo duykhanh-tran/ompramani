@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\Products\Tables;
 
 use App\Enums\ProductStatus;
+use App\Services\Media\MediaUrlResolver;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -24,7 +25,10 @@ class ProductsTable
             ->columns([
                 ImageColumn::make('cover_image')
                     ->label('Ảnh')
+                    ->visibility('public')
+                    ->checkFileExistence(false)
                     ->disk((string) config('filesystems.public_disk', 'public'))
+                    ->state(fn ($record): ?string => MediaUrlResolver::resolve($record->cover_image))
                     ->square()
                     ->defaultImageUrl('/images/product-placeholder.png'),
 

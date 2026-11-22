@@ -8,6 +8,7 @@ use App\Enums\InventoryMode;
 use App\Enums\ProductStatus;
 use App\Models\InventoryMovement;
 use App\Models\Product;
+use App\Services\Media\MediaUrlResolver;
 use App\Services\Shop\InventoryService;
 use BackedEnum;
 use UnitEnum;
@@ -58,7 +59,10 @@ class ManageInventory extends Page implements HasTable
             ->columns([
                 ImageColumn::make('cover_image')
                     ->label('Ảnh')
+                    ->visibility('public')
+                    ->checkFileExistence(false)
                     ->disk((string) config('filesystems.public_disk', 'public'))
+                    ->state(fn ($record): ?string => MediaUrlResolver::resolve($record->cover_image))
                     ->square()
                     ->defaultImageUrl('/images/product-placeholder.png'),
 

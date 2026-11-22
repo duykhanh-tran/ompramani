@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\UserProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -55,13 +56,7 @@ class UserProfile extends Model
                 return null;
             }
 
-            if (str_starts_with($this->avatar, 'http://') || str_starts_with($this->avatar, 'https://')) {
-                return $this->avatar;
-            }
-
-            $disk = (string) config('filesystems.public_disk', 'public');
-
-            return Storage::disk($disk)->url($this->avatar);
+            return MediaUrlResolver::resolve($this->avatar);
         });
     }
 }

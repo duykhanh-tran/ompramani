@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\BuddhistFigure;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -18,6 +19,8 @@ class BuddhistFigureResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $imageUrl = MediaUrlResolver::resolve($this->thumbnail);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -32,8 +35,8 @@ class BuddhistFigureResource extends JsonResource
             'vows' => BuddhistFigureVowResource::collection($this->whenLoaded('vows')),
             'iconography' => $this->iconography,
             'practice_guidance' => $this->practice_guidance,
-            'thumbnail' => $this->thumbnail,
-            'image_url' => $this->thumbnail,
+            'thumbnail' => $imageUrl,
+            'image_url' => $imageUrl,
             'tradition' => new TraditionResource($this->whenLoaded('tradition')),
             'traditions' => TraditionResource::collection($this->whenLoaded('traditions')),
             'sutras' => SutraResource::collection($this->whenLoaded('sutras')),

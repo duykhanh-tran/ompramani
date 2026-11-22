@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Mantras\Tables;
 
 use App\Models\Mantra;
+use App\Services\Media\MediaUrlResolver;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -22,6 +23,10 @@ class MantrasTable
                 ImageColumn::make('figure.thumbnail')
                     ->label('Ảnh (Figure)')
                     ->circular()
+                    ->visibility('public')
+                    ->checkFileExistence(false)
+                    ->disk((string) config('filesystems.public_disk', 'public'))
+                    ->state(fn ($record): ?string => MediaUrlResolver::resolve($record->figure?->thumbnail))
                     ->defaultImageUrl('https://lh3.googleusercontent.com/aida-public/AB6AXuA0yHXbepcasIOm7sdXStFD3jiTbEWkLEAuhYWHZoReJePvbIXopc820f28MkNX-wB7UZi4KzW1h5duIxv32pDxQIQCJs93zhGbWD2RuO41QWZZdoHgw9FUZ6G_5NLYvZHXMWde_BDeXdHmHhOmCpaNqKjG9fS9CESHLSlHBD4666w6Ib9scXz19o_ydlmVm8s5DqEMixxNsiVmq7vEIoiocrfJVJZOk9Jok8kDE6A'),
 
                 TextColumn::make('title')

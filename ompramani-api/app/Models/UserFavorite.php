@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\VideoEditorialStatus;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -112,12 +113,14 @@ class UserFavorite extends Model
 
         $target = $this->favoritable;
 
-        return match ($this->favoritable_type) {
+        $raw = match ($this->favoritable_type) {
             'sutra' => $target?->thumbnail,
             'article' => $target?->cover_image,
             'video' => $target?->thumbnail_url,
             default => null,
         };
+
+        return MediaUrlResolver::resolve($raw);
     }
 
     /**
