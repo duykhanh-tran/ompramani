@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e7bba31bf39dde44cbaa11160602a021",
+    "content-hash": "a9132f258bb9491667314f6f1ebd67d7",
     "packages": [
         {
             "name": "anourvalar/eloquent-serialize",
@@ -796,16 +796,16 @@
         },
         {
             "name": "codebar-ag/laravel-flysystem-cloudinary",
-            "version": "v13.0.0",
+            "version": "v13.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/codebar-ag/laravel-flysystem-cloudinary.git",
-                "reference": "920cd899d092f38356a23cf7f55453052baf7f78"
+                "reference": "ab32c359ea69976f6dc92a5a422224fd15587baf"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/codebar-ag/laravel-flysystem-cloudinary/zipball/920cd899d092f38356a23cf7f55453052baf7f78",
-                "reference": "920cd899d092f38356a23cf7f55453052baf7f78",
+                "url": "https://api.github.com/repos/codebar-ag/laravel-flysystem-cloudinary/zipball/ab32c359ea69976f6dc92a5a422224fd15587baf",
+                "reference": "ab32c359ea69976f6dc92a5a422224fd15587baf",
                 "shasum": ""
             },
             "require": {
@@ -865,9 +865,9 @@
             ],
             "support": {
                 "issues": "https://github.com/codebar-ag/laravel-flysystem-cloudinary/issues",
-                "source": "https://github.com/codebar-ag/laravel-flysystem-cloudinary/tree/v13.0.0"
+                "source": "https://github.com/codebar-ag/laravel-flysystem-cloudinary/tree/v13.2.0"
             },
-            "time": "2026-04-03T15:04:12+00:00"
+            "time": "2026-05-20T15:35:47+00:00"
         },
         {
             "name": "composer/class-map-generator",
