@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Sutras\Tables;
 
+use App\Services\Media\MediaUrlResolver;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -18,7 +19,10 @@ class SutrasTable
             ->columns([
                 ImageColumn::make('thumbnail')
                     ->label('Ảnh')
+                    ->visibility('public')
+                    ->checkFileExistence(false)
                     ->disk((string) config('filesystems.public_disk', 'public'))
+                    ->state(fn ($record): ?string => MediaUrlResolver::resolve($record->thumbnail))
                     ->square()
                     ->toggleable(),
                 TextColumn::make('title')

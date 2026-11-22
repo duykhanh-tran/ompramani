@@ -32,7 +32,11 @@ fi
 # Run database migrations if AUTO_MIGRATE or RUN_MIGRATIONS is set
 if [ "$AUTO_MIGRATE" = "true" ] || [ "$RUN_MIGRATIONS" = "true" ]; then
     echo "==> Running database migrations on production database..."
-    php artisan migrate --force || true
+    if ! php artisan migrate --force; then
+        echo "ERROR: Database migrations failed! Please check database credentials and schema."
+        exit 1
+    fi
+    echo "==> Database migrations completed successfully."
 fi
 
 # Ensure storage link exists

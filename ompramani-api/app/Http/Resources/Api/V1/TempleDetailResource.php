@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Temple;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -79,10 +80,10 @@ class TempleDetailResource extends JsonResource
                 'slug' => $t->slug,
                 'is_primary' => (bool) ($t->pivot->is_primary ?? false),
             ]),
-            'cover_image' => $this->getCoverImageUrl(),
+            'cover_image' => MediaUrlResolver::resolve($this->getCoverImageUrl()),
             'images' => $this->media->map(fn ($m) => [
                 'id' => $m->id,
-                'file_path' => $m->file_path,
+                'file_path' => MediaUrlResolver::resolve($m->file_path),
                 'file_name' => $m->file_name,
                 'alt_text' => $m->alt_text,
                 'caption' => $m->caption,

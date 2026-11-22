@@ -103,13 +103,11 @@ return [
 
         'cloudinary' => [
             'driver' => 'cloudinary',
+            'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
             'api_key' => env('CLOUDINARY_API_KEY'),
             'api_secret' => env('CLOUDINARY_API_SECRET'),
-            'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
-            'url' => env('CLOUDINARY_URL'),
-            'secure_url' => (bool) env('CLOUDINARY_SECURE_URL', true),
-            'options' => [
-                'resource_type' => 'auto',
+            'url' => [
+                'secure' => (bool) env('CLOUDINARY_SECURE_URL', true),
             ],
             'throw' => false,
             'report' => false,

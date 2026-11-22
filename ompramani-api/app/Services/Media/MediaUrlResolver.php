@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Media;
 
 use App\Models\CloudinaryMediaMapping;
-use Cloudinary\Cloudinary;
-use Cloudinary\Configuration\Configuration;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -58,6 +57,7 @@ class MediaUrlResolver
 
         $path = trim((string) $path);
 
+        // 1. Return already fully-qualified or data URLs immediately
         if (Str::startsWith($path, ['http://', 'https://', 'data:'])) {
             return $path;
         }
@@ -66,17 +66,19 @@ class MediaUrlResolver
             return 'https:' . $path;
         }
 
-        // Normalize leading slashes and storage prefix
+        // 2. Normalize path: strip leading slashes and common prefixes like 'storage/' or 'public/'
         $normalized = ltrim($path, '/');
         if (Str::startsWith($normalized, 'storage/')) {
             $normalized = substr($normalized, 8);
+        } elseif (Str::startsWith($normalized, 'public/')) {
+            $normalized = substr($normalized, 7);
         }
 
         if (isset(static::$resolvedCache[$normalized])) {
             return static::$resolvedCache[$normalized];
         }
 
-        // 1. Check database mapping table if file was previously synced to Cloudinary
+        // 3. Priority: Check database mapping table for confirmed synced Cloudinary media
         try {
             $mapping = CloudinaryMediaMapping::query()
                 ->where('local_path', $normalized)
@@ -84,35 +86,29 @@ class MediaUrlResolver
                 ->first();
 
             if ($mapping && filled($mapping->secure_url)) {
-                static::$resolvedCache[$normalized] = (string) $mapping->secure_url;
-
-                return static::$resolvedCache[$normalized];
+                return static::$resolvedCache[$normalized] = (string) $mapping->secure_url;
             }
-        } catch (\Throwable) {
-            // DB might be booting or table not yet migrated in tests
+        } catch (\Throwable $e) {
+            Log::warning('MediaUrlResolver: failed to query cloudinary_media_mappings table: ' . $e->getMessage(), [
+                'path' => $normalized,
+            ]);
         }
 
+        // 4. If public disk is configured to an external cloud disk (like r2_public or s3), resolve via that disk
         $publicDisk = (string) config('filesystems.public_disk', 'public');
+        if ($publicDisk !== 'public' && $publicDisk !== 'cloudinary') {
+            try {
+                $storageUrl = Storage::disk($publicDisk)->url($normalized);
 
-        // 2. If active public disk is Cloudinary, construct direct Cloudinary URL
-        if ($publicDisk === 'cloudinary') {
-            $cloudinaryUrl = static::buildCloudinaryUrl($normalized);
-            if ($cloudinaryUrl) {
-                static::$resolvedCache[$normalized] = $cloudinaryUrl;
-
-                return $cloudinaryUrl;
+                return static::$resolvedCache[$normalized] = $storageUrl;
+            } catch (\Throwable) {
+                // Ignore and fall through to legacy fallback
             }
         }
 
-        // 3. Fallback to standard Laravel Storage URL
-        try {
-            $storageUrl = Storage::disk($publicDisk)->url($normalized);
-            static::$resolvedCache[$normalized] = $storageUrl;
-
-            return $storageUrl;
-        } catch (\Throwable) {
-            return $fallback;
-        }
+        // 5. Fallback: If not yet synced to Cloudinary, do NOT fabricate an unverified Cloudinary URL.
+        // Return the legacy path directly so existing API contracts and frontend resolver remain 100% backwards compatible.
+        return static::$resolvedCache[$normalized] = $path;
     }
 
     /**
@@ -139,7 +135,6 @@ class MediaUrlResolver
         $resourceType = static::getResourceType($path);
         $cleanPath = ltrim($path, '/');
 
-        // Strip repeated extension if path already includes it
         return sprintf(
             'https://res.cloudinary.com/%s/%s/upload/%s',
             $cloudName,

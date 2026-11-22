@@ -135,7 +135,7 @@ class BuddhistFigureForm
                                 ['table', 'attachFiles'],
                                 ['undo', 'redo'],
                             ])
-                            ->fileAttachmentsDisk('public')
+                            ->fileAttachmentsDisk((string) config('filesystems.public_disk', 'public'))
                             ->fileAttachmentsDirectory('buddhist-figures/content')
                             ->fileAttachmentsMaxSize(5120)
                             ->helperText('Soạn thảo nội dung phong phú với định dạng tiêu đề (H1, H2, H3), in đậm, in nghiêng, gạch chân, danh sách và liên kết theo hệ typography Noto Serif / Be Vietnam Pro.')

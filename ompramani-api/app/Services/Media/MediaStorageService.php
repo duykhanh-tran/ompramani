@@ -24,36 +24,53 @@ class MediaStorageService
      */
     protected const CHUNKED_UPLOAD_THRESHOLD_BYTES = 20971520;
 
-    public function __construct()
+    public function __construct(?array $config = null)
     {
-        $this->initializeCloudinary();
+        $this->initializeCloudinary($config);
     }
 
     /**
      * Initialize Cloudinary client from filesystems disk or environment.
+     *
+     * @param array<string, mixed>|null $customConfig
      */
-    protected function initializeCloudinary(): void
+    protected function initializeCloudinary(?array $customConfig = null): void
     {
-        $diskConfig = config('filesystems.disks.cloudinary', []);
+        $diskConfig = $customConfig ?? config('filesystems.disks.cloudinary', []);
 
-        $cloudName = $diskConfig['cloud_name'] ?? env('CLOUDINARY_CLOUD_NAME');
-        $apiKey = $diskConfig['api_key'] ?? env('CLOUDINARY_API_KEY');
-        $apiSecret = $diskConfig['api_secret'] ?? env('CLOUDINARY_API_SECRET');
-        $url = $diskConfig['url'] ?? env('CLOUDINARY_URL');
+        $cloudName = $diskConfig['cloud_name'] ?? null;
+        $apiKey = $diskConfig['api_key'] ?? null;
+        $apiSecret = $diskConfig['api_secret'] ?? null;
+        $url = is_string($diskConfig['url'] ?? null) ? $diskConfig['url'] : null;
+
+        if ($customConfig === null) {
+            $cloudName = $cloudName ?: env('CLOUDINARY_CLOUD_NAME');
+            $apiKey = $apiKey ?: env('CLOUDINARY_API_KEY');
+            $apiSecret = $apiSecret ?: env('CLOUDINARY_API_SECRET');
+            $url = $url ?: env('CLOUDINARY_URL');
+        }
 
         if (filled($url)) {
-            $this->cloudinary = new Cloudinary($url);
+            try {
+                $this->cloudinary = new Cloudinary($url);
+            } catch (Throwable $e) {
+                Log::warning('MediaStorageService: failed to initialize from CLOUDINARY_URL: ' . $e->getMessage());
+            }
         } elseif (filled($cloudName) && filled($apiKey) && filled($apiSecret)) {
-            $this->cloudinary = new Cloudinary([
-                'cloud' => [
-                    'cloud_name' => $cloudName,
-                    'api_key' => $apiKey,
-                    'api_secret' => $apiSecret,
-                ],
-                'url' => [
-                    'secure' => (bool) ($diskConfig['secure_url'] ?? true),
-                ],
-            ]);
+            try {
+                $this->cloudinary = new Cloudinary([
+                    'cloud' => [
+                        'cloud_name' => $cloudName,
+                        'api_key' => $apiKey,
+                        'api_secret' => $apiSecret,
+                    ],
+                    'url' => [
+                        'secure' => (bool) ($diskConfig['url']['secure'] ?? env('CLOUDINARY_SECURE_URL', true)),
+                    ],
+                ]);
+            } catch (Throwable $e) {
+                Log::warning('MediaStorageService: failed to initialize from cloud config: ' . $e->getMessage());
+            }
         }
     }
 
@@ -112,10 +129,11 @@ class MediaStorageService
         $fileSize = (int) filesize($sourcePath);
         $checksum = (string) hash_file('sha256', $sourcePath);
 
+        // Do NOT overwrite existing resources by default unless explicitly instructed
         $uploadOptions = array_merge([
             'public_id' => $publicId,
             'resource_type' => $resourceType,
-            'overwrite' => true,
+            'overwrite' => false,
             'invalidate' => true,
             'use_filename' => false,
             'unique_filename' => false,
@@ -123,7 +141,7 @@ class MediaStorageService
 
         $uploadApi = $this->cloudinary->uploadApi();
 
-        // Use chunked upload for large audio files to prevent timeout on Render
+        // Use chunked upload for large audio/video files to prevent HTTP timeout
         if ($resourceType === 'video' && $fileSize > self::CHUNKED_UPLOAD_THRESHOLD_BYTES) {
             $uploadOptions['chunk_size'] = 6000000; // 6MB chunks
             $response = $uploadApi->uploadChunked($sourcePath, $uploadOptions);
@@ -196,7 +214,7 @@ class MediaStorageService
     }
 
     /**
-     * Delete a media file from Cloudinary and remove its mapping.
+     * Delete a media file from Cloudinary and remove its mapping if deletion succeeds.
      */
     public function deleteFromCloudinary(string $logicalPath): bool
     {
@@ -209,24 +227,38 @@ class MediaStorageService
         $publicId = $mapping?->public_id ?? MediaUrlResolver::extractPublicId($cleanPath);
         $resourceType = $mapping?->resource_type ?? MediaUrlResolver::getResourceType($cleanPath);
 
+        $cloudDeleteSucceeded = false;
+
         if ($this->isConfigured()) {
             try {
-                $this->cloudinary->uploadApi()->destroy($publicId, [
+                $response = $this->cloudinary->uploadApi()->destroy($publicId, [
                     'resource_type' => $resourceType,
                     'invalidate' => true,
                 ]);
+
+                $resArray = $response instanceof ApiResponse ? $response->getArrayCopy() : (array) $response;
+                $resultStatus = $resArray['result'] ?? '';
+
+                if ($resultStatus === 'ok' || $resultStatus === 'not found') {
+                    $cloudDeleteSucceeded = true;
+                } else {
+                    Log::warning("Cloudinary destroy returned unexpected status [{$resultStatus}] for asset [{$publicId}]");
+                }
             } catch (Throwable $e) {
                 Log::warning("Failed to destroy asset [{$publicId}] on Cloudinary: " . $e->getMessage());
             }
+        } else {
+            Log::warning("Cannot delete asset [{$publicId}] from Cloudinary: Cloudinary is not configured.");
         }
 
-        if ($mapping) {
+        // Do NOT delete database mapping if Cloudinary deletion failed
+        if ($cloudDeleteSucceeded && $mapping) {
             $mapping->delete();
         }
 
         MediaUrlResolver::clearCache();
 
-        return true;
+        return $cloudDeleteSucceeded;
     }
 
     /**

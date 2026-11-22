@@ -174,7 +174,7 @@ export default async function MantraDetailPage({
           {/* Mantra Chant Audio Player */}
           <div className="bg-[#FAF7F0] border border-[#dfd2be] rounded-3xl p-6 shadow-sm flex flex-col items-center justify-center">
             <MantraChantPlayer
-              audioUrl={mantra.audio_url}
+              audioUrl={resolveMediaUrl(mantra.audio_url)}
               mantraTitle={mantra.title}
             />
           </div>

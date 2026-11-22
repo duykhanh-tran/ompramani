@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Mantra;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -19,7 +20,7 @@ class MantraResource extends JsonResource
     public function toArray(Request $request): array
     {
         $figureThumb = $this->figure?->thumbnail;
-        $resolvedThumb = $figureThumb ?: $this->thumbnail;
+        $resolvedThumb = MediaUrlResolver::resolve($figureThumb ?: $this->thumbnail);
 
         return [
             'id' => $this->id,

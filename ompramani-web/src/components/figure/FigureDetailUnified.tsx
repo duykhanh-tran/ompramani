@@ -380,7 +380,7 @@ export function FigureDetailUnified({ figure }: FigureDetailUnifiedProps) {
                     {/* Integrated Audio Chant Player */}
                     <div className="pt-4 flex flex-col items-center justify-center">
                       <MantraChantPlayer
-                        audioUrl={activeMantra.audio_url}
+                        audioUrl={resolveMediaUrl(activeMantra.audio_url)}
                         mantraTitle={activeMantra.title}
                       />
                     </div>

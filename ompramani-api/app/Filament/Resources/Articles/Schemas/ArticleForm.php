@@ -88,6 +88,8 @@ class ArticleForm
                 // Dòng 5: Nội dung bài viết (Full Width)
                 RichEditor::make('content')
                     ->label('Nội dung bài viết')
+                    ->fileAttachmentsDisk((string) config('filesystems.public_disk', 'public'))
+                    ->fileAttachmentsDirectory('articles/content')
                     ->required()
                     ->columnSpanFull(),
             ]);

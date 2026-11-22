@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Temple;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -32,7 +33,7 @@ class TempleSummaryResource extends JsonResource
             'formatted_address' => $this->formattedAddress(),
             'province_name' => $this->province_name,
             'country_code' => $this->country_code,
-            'cover_image' => $this->getCoverImageUrl(),
+            'cover_image' => MediaUrlResolver::resolve($this->getCoverImageUrl()),
             'traditions' => $this->traditions->map(fn ($t) => [
                 'id' => $t->id,
                 'name' => $t->name,

@@ -18,6 +18,7 @@ use App\Services\Media\MediaStorageService;
 use App\Services\Media\MediaUrlResolver;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Symfony\Component\Finder\SplFileInfo;
 use Throwable;
 
@@ -29,7 +30,7 @@ class MigrateMediaToCloudinaryCommand extends Command
      * @var string
      */
     protected $signature = 'cloudinary:migrate-media
-                            {--dry-run : Preview files that would be migrated without uploading}
+                            {--dry-run : Preview files that would be migrated without uploading or touching the database}
                             {--limit= : Limit the number of files to process}
                             {--type=all : Media type to process: all, images, or audio}
                             {--force : Overwrite files that have already been synced}';
@@ -68,7 +69,7 @@ class MigrateMediaToCloudinaryCommand extends Command
         $this->info('====================================================');
         $this->info(' OmPraMani — Cloudinary Media Migration Engine     ');
         $this->info('====================================================');
-        $this->line('Mode:     ' . ($isDryRun ? '<comment>DRY-RUN (Simulation only, no uploads)</comment>' : '<info>LIVE MIGRATION</info>'));
+        $this->line('Mode:     ' . ($isDryRun ? '<comment>DRY-RUN (Simulation only, no uploads, no DB changes)</comment>' : '<info>LIVE MIGRATION</info>'));
         $this->line("Type:     <comment>{$type}</comment>");
         $this->line('Force:    <comment>' . ($force ? 'YES' : 'NO') . '</comment>');
         $this->line('Limit:    <comment>' . ($limit ?: 'NONE') . '</comment>');
@@ -81,11 +82,23 @@ class MigrateMediaToCloudinaryCommand extends Command
             return self::FAILURE;
         }
 
-        $candidates = $this->collectMediaCandidates();
-        $this->info(sprintf('Discovered %d unique candidate paths across database and local storage.', count($candidates)));
+        // 1. Gather all local files
+        $localFiles = $this->collectLocalFiles();
+
+        // 2. Gather all database media paths
+        $dbPaths = $this->collectPathsFromDatabase();
+
+        // Combine into unique candidate list
+        $allCandidates = array_values(array_unique(array_merge($localFiles, $dbPaths)));
+
+        $this->info(sprintf('Discovery Stats:'));
+        $this->line(sprintf('  - Database media paths: %d', count($dbPaths)));
+        $this->line(sprintf('  - Local storage files:  %d', count($localFiles)));
+        $this->line(sprintf('  - Total unique items:   %d', count($allCandidates)));
+        $this->newLine();
 
         // Filter candidates by type (images / audio / all)
-        $filtered = array_filter($candidates, function (string $path) use ($type) {
+        $filtered = array_filter($allCandidates, function (string $path) use ($type) {
             if ($type === 'images') {
                 return MediaUrlResolver::isImage($path);
             }
@@ -100,11 +113,11 @@ class MigrateMediaToCloudinaryCommand extends Command
             $filtered = array_slice($filtered, 0, $limit);
         }
 
-        $this->info(sprintf('Processing %d media items under type filter [%s]...', count($filtered), $type));
+        $this->info(sprintf('Processing %d media items under filter [%s]...', count($filtered), $type));
         $this->newLine();
 
         $stats = [
-            'total' => count($filtered),
+            'total_candidates' => count($filtered),
             'uploaded' => 0,
             'skipped' => 0,
             'missing' => 0,
@@ -136,9 +149,14 @@ class MigrateMediaToCloudinaryCommand extends Command
             $fileSize = (int) filesize($fullLocalPath);
 
             // Check if already synced
-            $existingMapping = CloudinaryMediaMapping::query()
-                ->where('local_path', $relativePath)
-                ->first();
+            $existingMapping = null;
+            try {
+                $existingMapping = CloudinaryMediaMapping::query()
+                    ->where('local_path', $relativePath)
+                    ->first();
+            } catch (Throwable) {
+                // Table might not exist in dry run / fresh db
+            }
 
             if (! $force && $existingMapping && $existingMapping->status === 'synced' && $existingMapping->checksum === $checksum) {
                 $this->line("  [SKIP] Already synced: {$relativePath}");
@@ -163,7 +181,7 @@ class MigrateMediaToCloudinaryCommand extends Command
                     'resource_type' => $resourceType,
                     'file_size' => $fileSize,
                     'checksum' => $checksum,
-                    'would_upload_to' => MediaUrlResolver::buildCloudinaryUrl($relativePath),
+                    'target_url' => MediaUrlResolver::buildCloudinaryUrl($relativePath),
                 ];
 
                 continue;
@@ -171,7 +189,9 @@ class MigrateMediaToCloudinaryCommand extends Command
 
             try {
                 $this->line("  [UPLOADING] {$relativePath} ({$resourceType}, " . round($fileSize / 1024, 1) . ' KB)...');
-                $result = $storageService->uploadToCloudinary($fullLocalPath, $relativePath);
+                $result = $storageService->uploadToCloudinary($fullLocalPath, $relativePath, [
+                    'overwrite' => $force,
+                ]);
 
                 $stats['uploaded']++;
                 $this->info("    -> OK: {$result['secure_url']}");
@@ -201,11 +221,20 @@ class MigrateMediaToCloudinaryCommand extends Command
         $this->info('====================================================');
         $this->info(' Migration Summary Report                          ');
         $this->info('====================================================');
-        $this->line("Total items:  {$stats['total']}");
-        $this->line("Uploaded:     <info>{$stats['uploaded']}</info>");
-        $this->line("Skipped:      <comment>{$stats['skipped']}</comment>");
-        $this->line("Missing file: <comment>{$stats['missing']}</comment>");
-        $this->line("Failed:       <error>{$stats['failed']}</error>");
+        $this->line(sprintf('Tổng số đường dẫn media trong DB:  %d', count($dbPaths)));
+        $this->line(sprintf('Tổng số file local thực tế:        %d', count($localFiles)));
+        $this->line(sprintf('Số file xử lý / upload:            %s', $stats['uploaded']));
+        $this->line(sprintf('Số file bỏ qua (đã sync):          %s', $stats['skipped']));
+        $this->line(sprintf('Số file thiếu (missing local):     %s', $stats['missing']));
+        $this->line(sprintf('Số file thất bại:                  %s', $stats['failed']));
+
+        $totalSyncedInDb = 0;
+        try {
+            $totalSyncedInDb = CloudinaryMediaMapping::query()->where('status', 'synced')->count();
+        } catch (Throwable) {
+            // Ignore
+        }
+        $this->line(sprintf('Số mapping thành công trong DB:    %d', $totalSyncedInDb));
         $this->newLine();
 
         // Write Manifest file for auditing and rollback
@@ -215,7 +244,10 @@ class MigrateMediaToCloudinaryCommand extends Command
             'timestamp' => now()->toIso8601String(),
             'dry_run' => $isDryRun,
             'type' => $type,
+            'db_paths_count' => count($dbPaths),
+            'local_files_count' => count($localFiles),
             'stats' => $stats,
+            'total_synced_in_db' => $totalSyncedInDb,
             'entries' => $manifestEntries,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
@@ -225,16 +257,15 @@ class MigrateMediaToCloudinaryCommand extends Command
     }
 
     /**
-     * Collect all media paths from database and storage/app/public.
+     * Collect local files from storage/app/public.
      *
      * @return array<string>
      */
-    protected function collectMediaCandidates(): array
+    protected function collectLocalFiles(): array
     {
         $paths = [];
-
-        // 1. Scan filesystem directory storage/app/public
         $publicDir = storage_path('app/public');
+
         if (File::isDirectory($publicDir)) {
             $files = File::allFiles($publicDir);
             foreach ($files as $file) {
@@ -247,19 +278,7 @@ class MigrateMediaToCloudinaryCommand extends Command
             }
         }
 
-        // 2. Scan database models
-        $dbPaths = $this->collectPathsFromDatabase();
-        foreach ($dbPaths as $dbPath) {
-            $clean = ltrim(trim($dbPath), '/');
-            if (Str::startsWith($clean, 'storage/')) {
-                $clean = substr($clean, 8);
-            }
-            if ($this->shouldIncludePath($clean)) {
-                $paths[] = $clean;
-            }
-        }
-
-        return array_values(array_unique(array_filter($paths)));
+        return array_values(array_unique($paths));
     }
 
     /**
@@ -302,13 +321,27 @@ class MigrateMediaToCloudinaryCommand extends Command
             $avatars = UserProfile::query()->whereNotNull('avatar')->pluck('avatar')->all();
             $dbPaths = array_merge($dbPaths, $avatars);
         } catch (Throwable $e) {
-            $this->warn('Could not read all database tables (some tables may not exist in this environment): ' . $e->getMessage());
+            $this->warn('Could not read all database tables: ' . $e->getMessage());
         }
 
-        // Filter out absolute URLs and data URIs from candidates
-        return array_filter($dbPaths, function ($path) {
-            return is_string($path) && filled($path) && ! Str::startsWith($path, ['http://', 'https://', 'data:']);
-        });
+        $cleaned = [];
+        foreach ($dbPaths as $path) {
+            if (! is_string($path) || blank($path)) {
+                continue;
+            }
+            if (Str::startsWith($path, ['http://', 'https://', 'data:'])) {
+                continue;
+            }
+            $clean = ltrim(trim($path), '/');
+            if (Str::startsWith($clean, 'storage/')) {
+                $clean = substr($clean, 8);
+            }
+            if ($this->shouldIncludePath($clean)) {
+                $cleaned[] = $clean;
+            }
+        }
+
+        return array_values(array_unique($cleaned));
     }
 
     /**

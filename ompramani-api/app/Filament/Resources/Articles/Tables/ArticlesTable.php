@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Articles\Tables;
 
+use App\Services\Media\MediaUrlResolver;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -19,7 +20,10 @@ class ArticlesTable
             ->columns([
                 ImageColumn::make('cover_image')
                     ->label('Ảnh bìa')
+                    ->visibility('public')
+                    ->checkFileExistence(false)
                     ->disk((string) config('filesystems.public_disk', 'public'))
+                    ->state(fn ($record): ?string => MediaUrlResolver::resolve($record->cover_image))
                     ->square()
                     ->toggleable(),
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -51,20 +52,8 @@ class RecitationAudio extends Model
 
     public function resolveFileUrl(): string
     {
-        if (filled($this->file_url)) {
-            return $this->file_url;
-        }
+        $raw = filled($this->file_url) ? $this->file_url : $this->file_path;
 
-        if (filled($this->file_path)) {
-            if (str_starts_with($this->file_path, 'http://') || str_starts_with($this->file_path, 'https://')) {
-                return $this->file_path;
-            }
-
-            $disk = (string) config('filesystems.public_disk', 'public');
-
-            return Storage::disk($disk)->url($this->file_path);
-        }
-
-        return '';
+        return filled($raw) ? (MediaUrlResolver::resolve($raw) ?? '') : '';
     }
 }

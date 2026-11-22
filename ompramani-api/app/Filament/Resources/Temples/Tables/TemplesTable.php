@@ -8,6 +8,7 @@ use App\Enums\TemplePublicationStatus;
 use App\Enums\TempleType;
 use App\Enums\TempleVerificationStatus;
 use App\Models\Temple;
+use App\Services\Media\MediaUrlResolver;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -27,7 +28,10 @@ class TemplesTable
             ->columns([
                 ImageColumn::make('cover_image')
                     ->label('Ảnh')
+                    ->visibility('public')
+                    ->checkFileExistence(false)
                     ->disk((string) config('filesystems.public_disk', 'public'))
+                    ->state(fn ($record): ?string => MediaUrlResolver::resolve($record->getCoverImageUrl()))
                     ->square()
                     ->toggleable(),
 
