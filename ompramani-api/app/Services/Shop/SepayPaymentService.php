@@ -18,6 +18,59 @@ class SepayPaymentService
     private ?SePayClient $client = null;
 
     /**
+     * Check if a credential string is valid and not a placeholder or empty.
+     */
+    public function isValidCredential(?string $value): bool
+    {
+        if ($value === null) {
+            return false;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '' || strlen($trimmed) < 4) {
+            return false;
+        }
+
+        $lower = strtolower($trimmed);
+        $placeholders = [
+            'your_merchant_id',
+            'your_sandbox_merchant_id',
+            'your_merchant_secret_key',
+            'your_sandbox_merchant_secret_key',
+            'your_ipn_secret_key',
+            'your_sandbox_ipn_secret_key',
+            'placeholder',
+            'changeme',
+            'change_me',
+            'example',
+            'null',
+            'undefined',
+        ];
+
+        foreach ($placeholders as $placeholder) {
+            if ($lower === $placeholder || str_starts_with($lower, 'your_')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Get the normalized environment (sandbox or production).
+     */
+    public function getEnvironment(): string
+    {
+        $raw = strtolower(trim((string) (config('sepay.environment') ?? config('services.sepay.environment') ?? UrlConfig::ENVIRONMENT_SANDBOX)));
+
+        if ($raw === 'production' || $raw === 'prod') {
+            return UrlConfig::ENVIRONMENT_PRODUCTION;
+        }
+
+        return UrlConfig::ENVIRONMENT_SANDBOX;
+    }
+
+    /**
      * Determine if SePay Merchant credentials are configured.
      */
     public function isConfigured(): bool
@@ -25,7 +78,7 @@ class SepayPaymentService
         $merchantId = (string) (config('sepay.merchant_id') ?? config('services.sepay.merchant_id'));
         $secretKey = (string) (config('sepay.secret_key') ?? config('services.sepay.secret_key'));
 
-        return trim($merchantId) !== '' && trim($secretKey) !== '';
+        return $this->isValidCredential($merchantId) && $this->isValidCredential($secretKey);
     }
 
     /**
@@ -35,7 +88,7 @@ class SepayPaymentService
     {
         $ipnSecret = (string) (config('sepay.ipn_secret_key') ?? config('services.sepay.ipn_secret_key'));
 
-        return trim($ipnSecret) !== '';
+        return $this->isValidCredential($ipnSecret);
     }
 
     /**
@@ -55,13 +108,9 @@ class SepayPaymentService
             ]);
         }
 
-        $merchantId = (string) (config('sepay.merchant_id') ?? config('services.sepay.merchant_id'));
-        $secretKey = (string) (config('sepay.secret_key') ?? config('services.sepay.secret_key'));
-        $environment = (string) (config('sepay.environment') ?? config('services.sepay.environment') ?? UrlConfig::ENVIRONMENT_SANDBOX);
-
-        if (! UrlConfig::isValidEnvironment($environment)) {
-            $environment = UrlConfig::ENVIRONMENT_SANDBOX;
-        }
+        $merchantId = trim((string) (config('sepay.merchant_id') ?? config('services.sepay.merchant_id')));
+        $secretKey = trim((string) (config('sepay.secret_key') ?? config('services.sepay.secret_key')));
+        $environment = $this->getEnvironment();
 
         $this->client = new SePayClient($merchantId, $secretKey, $environment);
 

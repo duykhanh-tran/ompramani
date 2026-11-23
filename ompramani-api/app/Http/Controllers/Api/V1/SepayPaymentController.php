@@ -33,8 +33,15 @@ class SepayPaymentController extends Controller
     {
         // 1. Verify Secret Key Header (Fail-closed)
         $incomingSecret = $request->header('X-Secret-Key') ?? $request->header('x-secret-key');
+        if (empty($incomingSecret) && $request->hasHeader('Authorization')) {
+            $authHeader = (string) $request->header('Authorization');
+            if (preg_match('/^(?:Apikey|Bearer)\s+(.+)$/i', $authHeader, $matches)) {
+                $incomingSecret = trim($matches[1]);
+            }
+        }
+
         if (! $this->sepayService->verifyIpnSecretKey($incomingSecret)) {
-            Log::warning('SePay IPN rejected: Invalid or missing X-Secret-Key header.', [
+            Log::warning('SePay IPN rejected: Invalid or missing secret key header.', [
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
             ]);
@@ -67,6 +74,29 @@ class SepayPaymentController extends Controller
 
         $orderData = $payload['order'] ?? [];
         $transactionData = $payload['transaction'] ?? [];
+
+        // Verify Merchant ID if present in payload
+        $configuredMerchant = trim((string) (config('sepay.merchant_id') ?? config('services.sepay.merchant_id')));
+        $incomingMerchant = (string) ($orderData['merchant_id'] ?? $orderData['merchant'] ?? $payload['merchant_id'] ?? $payload['merchant'] ?? '');
+        if ($incomingMerchant !== '' && $configuredMerchant !== '' && $incomingMerchant !== $configuredMerchant) {
+            Log::error("SePay IPN merchant mismatch: Expected {$configuredMerchant}, received {$incomingMerchant}.");
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Merchant ID mismatch.',
+            ], 422);
+        }
+
+        // Check transaction status if provided
+        $transactionStatus = strtoupper((string) ($transactionData['transaction_status'] ?? $transactionData['status'] ?? ''));
+        if (in_array($transactionStatus, ['FAILED', 'CANCELLED', 'REJECTED', 'EXPIRED'], true)) {
+            Log::warning("SePay IPN transaction failed: status={$transactionStatus}.");
+
+            return response()->json([
+                'success' => false,
+                'message' => "Transaction status is {$transactionStatus}.",
+            ], 422);
+        }
 
         $invoiceNumber = (string) ($orderData['order_invoice_number'] ?? '');
         if (empty($invoiceNumber)) {
@@ -260,38 +290,41 @@ class SepayPaymentController extends Controller
         if ($latestPayment && $latestPayment->status === PaymentStatus::Pending && $order->payment_status !== PaymentStatus::Paid) {
             $gatewayOrder = $this->sepayService->retrieveOrderFromGateway((string) $latestPayment->transaction_ref);
             if ($gatewayOrder && isset($gatewayOrder['order_status']) && in_array(strtoupper((string) $gatewayOrder['order_status']), ['CAPTURED', 'PAID', 'APPROVED'], true)) {
-                // Reconcile atomically
-                DB::transaction(function () use ($order, $latestPayment, $gatewayOrder): void {
-                    $lockedPayment = OrderPayment::where('id', $latestPayment->id)->lockForUpdate()->first();
-                    $lockedOrder = Order::where('id', $order->id)->lockForUpdate()->first();
+                $gatewayAmount = isset($gatewayOrder['order_amount']) ? (int) round((float) $gatewayOrder['order_amount']) : null;
+                if ($gatewayAmount === null || $gatewayAmount === (int) $latestPayment->amount_vnd) {
+                    // Reconcile atomically
+                    DB::transaction(function () use ($order, $latestPayment, $gatewayOrder): void {
+                        $lockedPayment = OrderPayment::where('id', $latestPayment->id)->lockForUpdate()->first();
+                        $lockedOrder = Order::where('id', $order->id)->lockForUpdate()->first();
 
-                    if ($lockedPayment && $lockedPayment->status !== PaymentStatus::Paid) {
-                        $lockedPayment->status = PaymentStatus::Paid;
-                        $lockedPayment->paid_at = now();
-                        $lockedPayment->bank_transaction_no = (string) ($gatewayOrder['id'] ?? $gatewayOrder['order_id'] ?? '');
-                        $lockedPayment->save();
+                        if ($lockedPayment && $lockedPayment->status !== PaymentStatus::Paid) {
+                            $lockedPayment->status = PaymentStatus::Paid;
+                            $lockedPayment->paid_at = now();
+                            $lockedPayment->bank_transaction_no = (string) ($gatewayOrder['id'] ?? $gatewayOrder['order_id'] ?? '');
+                            $lockedPayment->save();
 
-                        $lockedOrder->payment_status = PaymentStatus::Paid;
-                        $lockedOrder->paid_at = now();
-                        if ($lockedOrder->order_status === OrderStatus::Pending) {
-                            $lockedOrder->order_status = OrderStatus::Confirmed;
+                            $lockedOrder->payment_status = PaymentStatus::Paid;
+                            $lockedOrder->paid_at = now();
+                            if ($lockedOrder->order_status === OrderStatus::Pending) {
+                                $lockedOrder->order_status = OrderStatus::Confirmed;
+                            }
+                            $lockedOrder->save();
+
+                            OrderStatusHistory::create([
+                                'order_id' => $lockedOrder->id,
+                                'from_status' => OrderStatus::Pending,
+                                'to_status' => $lockedOrder->order_status,
+                                'actor_type' => 'customer',
+                                'actor_id' => $lockedOrder->user_id,
+                                'reason' => 'Xác nhận thanh toán SePay thành công qua kiểm tra trực tiếp cổng thanh toán',
+                                'created_at' => now(),
+                            ]);
                         }
-                        $lockedOrder->save();
+                    });
 
-                        OrderStatusHistory::create([
-                            'order_id' => $lockedOrder->id,
-                            'from_status' => OrderStatus::Pending,
-                            'to_status' => $lockedOrder->order_status,
-                            'actor_type' => 'customer',
-                            'actor_id' => $lockedOrder->user_id,
-                            'reason' => 'Xác nhận thanh toán SePay thành công qua kiểm tra trực tiếp cổng thanh toán',
-                            'created_at' => now(),
-                        ]);
-                    }
-                });
-
-                $order->refresh();
-                $latestPayment->refresh();
+                    $order->refresh();
+                    $latestPayment->refresh();
+                }
             }
         }
 
@@ -349,6 +382,12 @@ class SepayPaymentController extends Controller
         if ($order->order_status === OrderStatus::Cancelled) {
             throw ValidationException::withMessages([
                 'order_status' => ['Không thể tạo phiên thanh toán mới cho đơn hàng đã hủy.'],
+            ]);
+        }
+
+        if (! $this->sepayService->isConfigured()) {
+            throw ValidationException::withMessages([
+                'payment' => ['Cổng thanh toán SePay hiện chưa sẵn sàng do chưa cấu hình. Quý đạo hữu có thể chuyển sang phương thức COD.'],
             ]);
         }
 
