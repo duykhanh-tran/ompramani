@@ -2,10 +2,10 @@
 
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Sutra } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
 import { FavoriteButton } from "@/components/favorites/FavoriteButton";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface SutraCardProps {
   sutra: Sutra;
@@ -24,21 +24,32 @@ export function SutraCard({ sutra }: SutraCardProps) {
         {imageUrl ? (
           <>
             {/* Ambient blur backdrop matching colors of the painting */}
-            <Image
+            <SafeImage
               src={imageUrl}
               alt=""
               fill
               className="object-cover blur-xl opacity-30 scale-110 pointer-events-none"
               aria-hidden="true"
+              fallback={<div className="hidden" />}
             />
             {/* Full uncropped artwork - sits below the badges */}
             <div className="relative w-full h-full z-0">
-              <Image
+              <SafeImage
                 src={imageUrl}
                 alt={sutra.title}
                 fill
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 className="object-contain group-hover:scale-[1.03] transition-transform duration-500 drop-shadow-sm"
+                fallback={
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container to-surface-container-high text-primary p-6">
+                    <span className="material-symbols-outlined text-[44px] mb-2 opacity-80">
+                      menu_book
+                    </span>
+                    <span className="font-headline-md text-sm text-center text-on-surface line-clamp-1">
+                      {sutra.title}
+                    </span>
+                  </div>
+                }
               />
             </div>
           </>

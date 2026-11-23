@@ -46,6 +46,20 @@ export function getXsrfToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("auth_token");
+}
+
+export function setAuthToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  if (token) {
+    localStorage.setItem("auth_token", token);
+  } else {
+    localStorage.removeItem("auth_token");
+  }
+}
+
 export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -60,6 +74,12 @@ export async function apiClient<T>(
 
   if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
+  }
+
+  // Cross-domain SPA authorization: attach Bearer token if stored in browser
+  const authToken = getAuthToken();
+  if (authToken && !headers["Authorization"]) {
+    headers["Authorization"] = `Bearer ${authToken}`;
   }
 
   const xsrfToken = getXsrfToken();
@@ -105,6 +125,10 @@ export async function apiClient<T>(
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
+      if (response.status === 401 && endpoint.includes("/auth/me")) {
+        setAuthToken(null);
+      }
+
       let errorData;
       try {
         errorData = await response.json();

@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import Image from "next/image";
 import { TempleMediaItem } from "@/types/temple";
 import { resolveMediaUrl } from "@/lib/utils/media";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface TempleGalleryProps {
   images?: TempleMediaItem[];
@@ -102,12 +102,13 @@ export function TempleGallery({ images = [], templeName }: TempleGalleryProps) {
             className="group relative aspect-4/3 rounded-2xl overflow-hidden border border-outline-variant/30 bg-surface-container-low hover:border-primary/50 transition-all focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 cursor-pointer shadow-xs"
             aria-label={`Xem ảnh ${idx + 1}: ${img.caption || img.alt_text || templeName}`}
           >
-            <Image
+            <SafeImage
               src={img.resolvedUrl}
               alt={img.alt_text || `Hình ảnh tự viện ${templeName}`}
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-300"
               sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+              fallbackIcon="temple_buddhist"
             />
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
@@ -158,13 +159,14 @@ export function TempleGallery({ images = [], templeName }: TempleGalleryProps) {
           {/* Image & Caption Container */}
           <div className="relative max-w-4xl max-h-[85vh] w-full flex flex-col items-center justify-center">
             <div className="relative w-full h-[60vh] sm:h-[70vh] rounded-2xl overflow-hidden">
-              <Image
+              <SafeImage
                 src={currentImage.resolvedUrl}
                 alt={currentImage.alt_text || `Ảnh ${templeName}`}
                 fill
                 priority
                 className="object-contain"
                 sizes="(max-width: 1024px) 100vw, 1024px"
+                fallbackIcon="temple_buddhist"
               />
             </div>
 

@@ -1,7 +1,8 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { ProductSummary } from "@/types/shop";
+import { resolveMediaUrl } from "@/lib/utils/media";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface ProductCardProps {
   product: ProductSummary;
@@ -9,6 +10,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const productUrl = `/cua-hang/${product.slug}`;
+  const resolvedCover = resolveMediaUrl(product.cover_image);
 
   return (
     <Link
@@ -18,24 +20,23 @@ export function ProductCard({ product }: ProductCardProps) {
     >
       {/* Top Image Container */}
       <div className="relative aspect-square w-full bg-surface-container-high overflow-hidden">
-        {product.cover_image ? (
-          <Image
-            src={product.cover_image}
-            alt={`Ảnh vật phẩm: ${product.name}`}
-            fill
-            className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-primary/40 p-4">
-            <span className="material-symbols-outlined text-[48px]">
-              self_improvement
-            </span>
-            <span className="text-xs text-on-surface-variant/70 italic mt-1 text-center">
-              Pháp Bảo Phật Giáo
-            </span>
-          </div>
-        )}
+        <SafeImage
+          src={resolvedCover}
+          alt={`Ảnh vật phẩm: ${product.name}`}
+          fill
+          className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+          fallback={
+            <div className="w-full h-full flex flex-col items-center justify-center text-primary/40 p-4">
+              <span className="material-symbols-outlined text-[48px]">
+                self_improvement
+              </span>
+              <span className="text-xs text-on-surface-variant/70 italic mt-1 text-center">
+                Pháp Bảo Phật Giáo
+              </span>
+            </div>
+          }
+        />
 
         {/* Top-Left Category Badge */}
         {product.category?.name && (

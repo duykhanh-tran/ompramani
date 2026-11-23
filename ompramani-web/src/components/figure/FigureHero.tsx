@@ -1,9 +1,9 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { BuddhistFigure } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
 import { getFigureTraditions, getFigureTypeLabel, parseSafeContent } from "@/lib/utils/sacred";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface FigureHeroProps {
   figure: BuddhistFigure;
@@ -92,27 +92,26 @@ export function FigureHero({ figure }: FigureHeroProps) {
         <div className="flex flex-col md:flex-row gap-8 items-center md:items-start relative z-10">
           {/* Portrait Image / Sacred Emblem */}
           <div className="w-56 sm:w-64 md:w-60 h-72 rounded-2xl overflow-hidden relative shrink-0 bg-surface-container-low border border-outline-variant/40 shadow-sm">
-            {imageUrl ? (
-              <Image
-                src={imageUrl}
-                alt={figure.name}
-                fill
-                sizes="(max-width: 768px) 256px, 240px"
-                className="object-cover"
-                priority
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container via-surface-container-high to-secondary-container/40 text-primary p-6 text-center">
-                <div className="w-20 h-20 rounded-full bg-surface-container-lowest/80 border border-outline-variant/40 flex items-center justify-center shadow-xs mb-3">
-                  <span className="material-symbols-outlined text-[44px] text-primary">
-                    self_improvement
+            <SafeImage
+              src={imageUrl}
+              alt={figure.name}
+              fill
+              sizes="(max-width: 768px) 256px, 240px"
+              className="object-cover"
+              priority
+              fallback={
+                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container via-surface-container-high to-secondary-container/40 text-primary p-6 text-center">
+                  <div className="w-20 h-20 rounded-full bg-surface-container-lowest/80 border border-outline-variant/40 flex items-center justify-center shadow-xs mb-3">
+                    <span className="material-symbols-outlined text-[44px] text-primary">
+                      self_improvement
+                    </span>
+                  </div>
+                  <span className="font-headline-md text-sm font-semibold text-on-surface line-clamp-2">
+                    {figure.name}
                   </span>
                 </div>
-                <span className="font-headline-md text-sm font-semibold text-on-surface line-clamp-2">
-                  {figure.name}
-                </span>
-              </div>
-            )}
+              }
+            />
           </div>
 
           {/* Profile Details */}

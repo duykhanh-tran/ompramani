@@ -4,23 +4,27 @@ const nextConfig: NextConfig = {
   /* config options here */
   output: "standalone",
   images: {
-    dangerouslyAllowLocalIP: true,
+    dangerouslyAllowLocalIP: process.env.NODE_ENV !== "production",
     remotePatterns: [
       {
         protocol: "https",
         hostname: "res.cloudinary.com",
+        pathname: "/**",
       },
       {
         protocol: "https",
-        hostname: "**",
+        hostname: "ompramani.onrender.com",
+        pathname: "/**",
       },
       {
         protocol: "http",
         hostname: "127.0.0.1",
+        pathname: "/**",
       },
       {
         protocol: "http",
         hostname: "localhost",
+        pathname: "/**",
       },
     ],
   },

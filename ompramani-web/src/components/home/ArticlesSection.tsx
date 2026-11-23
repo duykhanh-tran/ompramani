@@ -1,8 +1,8 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Article } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface Props {
   articles?: Article[];
@@ -50,21 +50,15 @@ export function ArticlesSection({ articles }: Props) {
             >
               {/* Thumbnail */}
               <div className="w-full sm:w-36 h-28 rounded-xl overflow-hidden relative shrink-0 bg-surface-container-low">
-                {coverImage ? (
-                  <Image
-                    src={coverImage}
-                    alt={article.title}
-                    fill
-                    sizes="(max-width: 640px) 100vw, 144px"
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-outline">
-                    <span className="material-symbols-outlined text-[36px]">
-                      auto_stories
-                    </span>
-                  </div>
-                )}
+                <SafeImage
+                  src={coverImage}
+                  alt={article.title}
+                  fill
+                  fallbackIcon="auto_stories"
+                  fallbackText={article.title}
+                  sizes="(max-width: 640px) 100vw, 144px"
+                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                />
               </div>
 
               {/* Text Info */}

@@ -35,10 +35,15 @@ class AuthController extends Controller
             $request->session()->regenerate();
         }
 
+        $token = $user->createToken('auth_token')->plainTextToken;
+
         return response()->json([
             'data' => [
                 'user' => new UserResource($user),
+                'token' => $token,
             ],
+            'token' => $token,
+            'user' => new UserResource($user),
         ], 201, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
@@ -54,11 +59,15 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+        $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'data' => [
                 'user' => new UserResource($user),
+                'token' => $token,
             ],
+            'token' => $token,
+            'user' => new UserResource($user),
         ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
@@ -67,6 +76,15 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
+        if ($request->user()) {
+            if ($request->user()->currentAccessToken() instanceof \Laravel\Sanctum\PersonalAccessToken) {
+                $request->user()->currentAccessToken()->delete();
+            } elseif ($request->bearerToken()) {
+                $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+                $tokenModel?->delete();
+            }
+        }
+
         Auth::guard('web')->logout();
 
         if ($request->hasSession()) {

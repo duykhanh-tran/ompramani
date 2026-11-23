@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Sutra, SutraVersion, SutraReadingProgress } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
@@ -14,6 +13,7 @@ import {
   removeSutraBookmarkByTarget,
 } from "@/lib/api/sutra-bookmarks";
 import { FavoriteButton } from "@/components/favorites/FavoriteButton";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface SutraHeaderProps {
   sutra: Sutra;
@@ -126,25 +126,24 @@ export function SutraHeader({ sutra, activeVersion, totalSections }: SutraHeader
       <div className="bg-surface-container-lowest rounded-3xl p-6 sm:p-8 border border-outline-variant/30 shadow-sm flex flex-col md:flex-row gap-6 items-start">
         {/* Sutra Thumbnail / Emblem */}
         <div className="w-full md:w-44 h-48 rounded-2xl overflow-hidden relative shrink-0 bg-surface-container-low border border-outline-variant/30">
-          {imageUrl ? (
-            <Image
-              src={imageUrl}
-              alt={sutra.title}
-              fill
-              sizes="(max-width: 768px) 100vw, 176px"
-              className="object-cover"
-              priority
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container to-surface-container-high text-primary p-4 text-center">
-              <span className="material-symbols-outlined text-[48px] mb-2 opacity-80">
-                menu_book
-              </span>
-              <span className="font-headline-md text-xs font-semibold text-on-surface line-clamp-2">
-                {sutra.title}
-              </span>
-            </div>
-          )}
+          <SafeImage
+            src={imageUrl}
+            alt={sutra.title}
+            fill
+            sizes="(max-width: 768px) 100vw, 176px"
+            className="object-cover"
+            priority
+            fallback={
+              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container to-surface-container-high text-primary p-4 text-center">
+                <span className="material-symbols-outlined text-[48px] mb-2 opacity-80">
+                  menu_book
+                </span>
+                <span className="font-headline-md text-xs font-semibold text-on-surface line-clamp-2">
+                  {sutra.title}
+                </span>
+              </div>
+            }
+          />
         </div>
 
         {/* Info Column */}
