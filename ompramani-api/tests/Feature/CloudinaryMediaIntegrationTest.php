@@ -139,8 +139,8 @@ class CloudinaryMediaIntegrationTest extends TestCase
             'status' => 'synced',
         ]);
 
-        $service = new MediaStorageService();
-        // Since Cloudinary is unconfigured or returns false, deletion must not delete mapping
+        $service = new MediaStorageService(['cloud_name' => null]);
+        // Since Cloudinary is unconfigured, deletion must not delete mapping
         $result = $service->deleteFromCloudinary($localPath);
 
         $this->assertFalse($result);

@@ -88,6 +88,8 @@ class TempleForm
                     ->image()
                     ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('temples/covers')
+                    ->visibility('public')
+                    ->fetchFileInformation(false)
                     ->maxSize(5120)
                     ->imagePreviewHeight('200')
                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])

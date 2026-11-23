@@ -93,6 +93,8 @@ class BuddhistFigureForm
                             ->image()
                             ->disk((string) config('filesystems.public_disk', 'public'))
                             ->directory('buddhist-figures')
+                            ->visibility('public')
+                            ->fetchFileInformation(false)
                             ->maxSize(5120)
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
                             ->helperText('Tải ảnh đại diện từ máy tính (định dạng JPG, PNG, WEBP, tối đa 5MB). Thần Chú liên kết sẽ tự động kế thừa ảnh này.')

@@ -94,6 +94,8 @@ class SutraForm
                     ->image()
                     ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('sutras/thumbnails')
+                    ->visibility('public')
+                    ->fetchFileInformation(false)
                     ->maxSize(5120)
                     ->helperText('Tải ảnh đại diện từ máy tính (định dạng JPG, PNG, WEBP, tối đa 5MB).'),
 

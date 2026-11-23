@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,7 +22,7 @@ class SutraBookmarkResource extends JsonResource
                 'id' => $this->sutra->id,
                 'title' => $this->sutra->title,
                 'slug' => $this->sutra->slug,
-                'thumbnail' => $this->sutra->thumbnail,
+                'thumbnail' => MediaUrlResolver::resolve($this->sutra->thumbnail),
                 'translator' => $this->sutra->translator,
                 'tradition' => $this->sutra->tradition ? [
                     'id' => $this->sutra->tradition->id,

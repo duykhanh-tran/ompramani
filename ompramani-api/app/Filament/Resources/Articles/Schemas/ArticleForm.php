@@ -57,6 +57,8 @@ class ArticleForm
                     ->image()
                     ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('articles/covers')
+                    ->visibility('public')
+                    ->fetchFileInformation(false)
                     ->maxSize(5120)
                     ->imagePreviewHeight('180')
                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])

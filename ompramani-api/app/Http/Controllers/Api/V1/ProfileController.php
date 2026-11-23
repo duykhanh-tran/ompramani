@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Profile\UploadAvatarRequest;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -122,7 +123,7 @@ class ProfileController extends Controller
             'message' => 'Đã cập nhật ảnh đại diện thành công.',
             'data' => [
                 'avatar' => $newPath,
-                'avatar_url' => Storage::disk($publicDisk)->url($newPath),
+                'avatar_url' => MediaUrlResolver::resolve($newPath),
                 'user' => new UserResource($user),
             ],
         ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

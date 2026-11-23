@@ -4,10 +4,20 @@ declare(strict_types=1);
 
 namespace App\Services\Media;
 
+use App\Models\Article;
+use App\Models\BuddhistFigure;
 use App\Models\CloudinaryMediaMapping;
+use App\Models\Mantra;
+use App\Models\Product;
+use App\Models\RecitationAudio;
+use App\Models\Sutra;
+use App\Models\Temple;
+use App\Models\TempleMedia;
+use App\Models\UserProfile;
 use Cloudinary\Api\ApiResponse;
 use Cloudinary\Cloudinary;
 use Cloudinary\Configuration\Configuration;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -152,6 +162,7 @@ class MediaStorageService
         $responseData = $response instanceof ApiResponse ? $response->getArrayCopy() : (array) $response;
 
         $secureUrl = (string) ($responseData['secure_url'] ?? MediaUrlResolver::buildCloudinaryUrl($logicalPath));
+        $secureUrl = MediaUrlResolver::cleanDoubleExtension($secureUrl);
         $returnedPublicId = (string) ($responseData['public_id'] ?? $publicId);
         $returnedFormat = (string) ($responseData['format'] ?? $extension);
 
@@ -185,6 +196,61 @@ class MediaStorageService
     }
 
     /**
+     * Check if a given media path is actively used by any record in the system.
+     */
+    public function isPathUsedByOtherRecords(string $path, ?Model $excludeModel = null): bool
+    {
+        $clean = ltrim(MediaUrlResolver::cleanDoubleExtension($path), '/');
+        if (Str::startsWith($clean, 'storage/')) {
+            $clean = substr($clean, 8);
+        }
+
+        $variants = array_values(array_unique([$clean, 'storage/' . $clean, '/' . $clean, $path]));
+
+        $isUsed = function ($query, ?Model $exclude): bool {
+            if ($exclude && $exclude->exists) {
+                $query->where($exclude->getKeyName(), '!=', $exclude->getKey());
+            }
+
+            return $query->exists();
+        };
+
+        try {
+            if ($isUsed(Article::query()->whereIn('cover_image', $variants), $excludeModel instanceof Article ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(Product::query()->whereIn('cover_image', $variants), $excludeModel instanceof Product ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(BuddhistFigure::query()->whereIn('thumbnail', $variants), $excludeModel instanceof BuddhistFigure ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(Sutra::query()->whereIn('thumbnail', $variants), $excludeModel instanceof Sutra ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(Temple::query()->whereIn('cover_image', $variants), $excludeModel instanceof Temple ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(TempleMedia::query()->whereIn('file_path', $variants), $excludeModel instanceof TempleMedia ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(Mantra::query()->whereIn('audio_path', $variants), $excludeModel instanceof Mantra ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(RecitationAudio::query()->whereIn('file_path', $variants), $excludeModel instanceof RecitationAudio ? $excludeModel : null)) {
+                return true;
+            }
+            if ($isUsed(UserProfile::query()->whereIn('avatar', $variants), $excludeModel instanceof UserProfile ? $excludeModel : null)) {
+                return true;
+            }
+        } catch (Throwable $e) {
+            Log::debug('MediaStorageService::isPathUsedByOtherRecords check suppressed: ' . $e->getMessage());
+        }
+
+        return false;
+    }
+
+    /**
      * Check if a media asset exists in Cloudinary.
      */
     public function existsInCloudinary(string $logicalPath): bool
@@ -215,10 +281,18 @@ class MediaStorageService
 
     /**
      * Delete a media file from Cloudinary and remove its mapping if deletion succeeds.
+     * Prevents deletion if the media path is still actively used by another record unless forced.
      */
-    public function deleteFromCloudinary(string $logicalPath): bool
+    public function deleteFromCloudinary(string $logicalPath, bool $force = false, ?Model $ownerModel = null): bool
     {
         $cleanPath = ltrim($logicalPath, '/');
+
+        // Prevent accidental deletion if media is shared by other records
+        if (! $force && $this->isPathUsedByOtherRecords($cleanPath, $ownerModel)) {
+            Log::info("MediaStorageService: skip deleting [{$cleanPath}] as it is still referenced by other records.");
+
+            return false;
+        }
 
         $mapping = CloudinaryMediaMapping::query()
             ->where('local_path', $cleanPath)

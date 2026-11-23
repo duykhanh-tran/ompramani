@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\OrderItem;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -20,15 +21,9 @@ class OrderItemResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $imageUrl = null;
-        if (! empty($this->product_image_snapshot)) {
-            if (Str::startsWith($this->product_image_snapshot, ['http://', 'https://', '/'])) {
-                $imageUrl = $this->product_image_snapshot;
-            } else {
-                $publicDisk = (string) config('filesystems.public_disk', 'public');
-                $imageUrl = Storage::disk($publicDisk)->url($this->product_image_snapshot);
-            }
-        }
+        $imageUrl = filled($this->product_image_snapshot)
+            ? MediaUrlResolver::resolve($this->product_image_snapshot)
+            : null;
 
         return [
             'id' => $this->id,
