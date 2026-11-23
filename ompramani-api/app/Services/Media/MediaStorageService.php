@@ -161,8 +161,11 @@ class MediaStorageService
 
         $responseData = $response instanceof ApiResponse ? $response->getArrayCopy() : (array) $response;
 
-        $secureUrl = (string) ($responseData['secure_url'] ?? MediaUrlResolver::buildCloudinaryUrl($logicalPath));
-        $secureUrl = MediaUrlResolver::cleanDoubleExtension($secureUrl);
+        if (isset($responseData['secure_url']) && filled($responseData['secure_url'])) {
+            $secureUrl = (string) $responseData['secure_url'];
+        } else {
+            $secureUrl = (string) MediaUrlResolver::buildCloudinaryUrl($logicalPath);
+        }
         $returnedPublicId = (string) ($responseData['public_id'] ?? $publicId);
         $returnedFormat = (string) ($responseData['format'] ?? $extension);
 
@@ -251,6 +254,117 @@ class MediaStorageService
     }
 
     /**
+     * Inspect an asset on Cloudinary and distinguish between:
+     * - 'found': asset exists, returns verified asset data
+     * - 'not_found': confirmed that asset does NOT exist on Cloudinary (404)
+     * - 'rate_limited': rate limit exceeded (420/429)
+     * - 'auth_error': invalid credentials or authorization failure (401)
+     * - 'api_error': temporary network / timeout / 5xx server error
+     * - 'unconfigured': Cloudinary credentials not configured
+     *
+     * @return array{
+     *     status: 'found'|'not_found'|'rate_limited'|'auth_error'|'api_error'|'unconfigured',
+     *     asset: ?array{
+     *         public_id: string,
+     *         resource_type: string,
+     *         format: string,
+     *         secure_url: string,
+     *         bytes: ?int
+     *     },
+     *     error: ?string
+     * }
+     */
+    public function inspectCloudinaryAsset(string $publicId, ?string $resourceType = null): array
+    {
+        if (! $this->isConfigured()) {
+            return [
+                'status' => 'unconfigured',
+                'asset' => null,
+                'error' => 'Cloudinary credentials are not configured',
+            ];
+        }
+
+        $cleanPublicId = MediaUrlResolver::extractPublicId($publicId);
+        $type = $resourceType ?: MediaUrlResolver::getResourceType($publicId);
+
+        $candidates = array_values(array_unique([$cleanPublicId, $publicId]));
+        $lastError = null;
+
+        foreach ($candidates as $id) {
+            try {
+                $response = $this->cloudinary->adminApi()->asset($id, [
+                    'resource_type' => $type,
+                ]);
+
+                $data = $response instanceof ApiResponse ? $response->getArrayCopy() : (array) $response;
+
+                return [
+                    'status' => 'found',
+                    'asset' => [
+                        'public_id' => (string) ($data['public_id'] ?? $id),
+                        'resource_type' => (string) ($data['resource_type'] ?? $type),
+                        'format' => (string) ($data['format'] ?? pathinfo($id, PATHINFO_EXTENSION)),
+                        'secure_url' => (string) ($data['secure_url'] ?? $data['url'] ?? ''),
+                        'bytes' => isset($data['bytes']) ? (int) $data['bytes'] : null,
+                    ],
+                    'error' => null,
+                ];
+            } catch (\Cloudinary\Api\Exception\NotFound $e) {
+                $lastError = $e->getMessage();
+            } catch (\Cloudinary\Api\Exception\RateLimited $e) {
+                return [
+                    'status' => 'rate_limited',
+                    'asset' => null,
+                    'error' => 'Cloudinary API rate limit exceeded: ' . $e->getMessage(),
+                ];
+            } catch (\Cloudinary\Api\Exception\AuthorizationRequired $e) {
+                return [
+                    'status' => 'auth_error',
+                    'asset' => null,
+                    'error' => 'Cloudinary authorization failed: ' . $e->getMessage(),
+                ];
+            } catch (Throwable $e) {
+                // Check if message or code indicates 404
+                if (str_contains(strtolower($e->getMessage()), 'not found') || $e->getCode() === 404) {
+                    $lastError = $e->getMessage();
+                } else {
+                    return [
+                        'status' => 'api_error',
+                        'asset' => null,
+                        'error' => 'Cloudinary API temporary error: ' . $e->getMessage(),
+                    ];
+                }
+            }
+        }
+
+        return [
+            'status' => 'not_found',
+            'asset' => null,
+            'error' => $lastError ?: 'Resource not found',
+        ];
+    }
+
+    /**
+     * Retrieve asset details directly from Cloudinary Admin API.
+     * Returns null if asset does not exist, credentials are not configured,
+     * or API error occurred.
+     *
+     * @return array{
+     *     public_id: string,
+     *     resource_type: string,
+     *     format: string,
+     *     secure_url: string,
+     *     bytes: ?int
+     * }|null
+     */
+    public function getCloudinaryAsset(string $publicId, ?string $resourceType = null): ?array
+    {
+        $inspection = $this->inspectCloudinaryAsset($publicId, $resourceType);
+
+        return $inspection['status'] === 'found' ? $inspection['asset'] : null;
+    }
+
+    /**
      * Check if a media asset exists in Cloudinary.
      */
     public function existsInCloudinary(string $logicalPath): bool
@@ -268,15 +382,7 @@ class MediaStorageService
         $publicId = $mapping?->public_id ?? MediaUrlResolver::extractPublicId($cleanPath);
         $resourceType = $mapping?->resource_type ?? MediaUrlResolver::getResourceType($cleanPath);
 
-        try {
-            $this->cloudinary->adminApi()->asset($publicId, [
-                'resource_type' => $resourceType,
-            ]);
-
-            return true;
-        } catch (Throwable) {
-            return false;
-        }
+        return $this->getCloudinaryAsset($publicId, $resourceType) !== null;
     }
 
     /**

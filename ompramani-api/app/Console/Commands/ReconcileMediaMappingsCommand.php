@@ -17,6 +17,7 @@ use App\Models\UserProfile;
 use App\Services\Media\MediaStorageService;
 use App\Services\Media\MediaUrlResolver;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -34,6 +35,8 @@ class ReconcileMediaMappingsCommand extends Command
                             {--dry-run : Inspect and report media inconsistencies without writing to DB or uploading}
                             {--fix : Automatically repair confirmed issues (upload missing files, fix double extensions, fix sutra 7 mismatch)}
                             {--force : Force re-upload / overwrite even if mapping exists}
+                            {--database= : Target database connection name (e.g. pgsql, neon, sqlite)}
+                            {--url= : Direct PostgreSQL connection URL (e.g. Neon connection string)}
                             {--output-csv= : Custom path for the CSV report}';
 
     /**
@@ -49,6 +52,8 @@ class ReconcileMediaMappingsCommand extends Command
         $shouldFix = (bool) $this->option('fix');
         $force = (bool) $this->option('force');
         $csvOption = $this->option('output-csv');
+        $directUrl = $this->option('url');
+        $targetDb = $this->option('database');
 
         // If neither --dry-run nor --fix is passed, default to safe dry-run mode
         if (! $isDryRun && ! $shouldFix) {
@@ -61,88 +66,224 @@ class ReconcileMediaMappingsCommand extends Command
         $this->info('===============================================================');
         $this->line('Mode:     ' . ($shouldFix ? '<fg=green;options=bold>AUTO-REPAIR (--fix)</>' : '<fg=yellow;options=bold>AUDIT ONLY (DRY-RUN)</>'));
         $this->line('Force:    ' . ($force ? '<comment>YES</comment>' : 'NO'));
+
+        $originalConnection = DB::getDefaultConnection();
+
+        // Switch to target DB connection or dynamic direct URL if provided
+        if (filled($directUrl)) {
+            $host = parse_url($directUrl, PHP_URL_HOST) ?: 'remote';
+            $this->line("Target:   <fg=cyan;options=bold>DIRECT URL ({$host})</>");
+            config([
+                'database.connections.reconcile_target' => [
+                    'driver' => 'pgsql',
+                    'url' => $directUrl,
+                    'charset' => 'utf8',
+                    'prefix' => '',
+                    'search_path' => 'public',
+                    'sslmode' => 'require',
+                ],
+            ]);
+            DB::setDefaultConnection('reconcile_target');
+        } elseif (filled($targetDb)) {
+            $this->line("Target:   <fg=cyan;options=bold>DATABASE CONNECTION ({$targetDb})</>");
+            DB::setDefaultConnection($targetDb);
+        } else {
+            $this->line("Target:   <fg=cyan;options=bold>DEFAULT CONNECTION ({$originalConnection})</>");
+        }
+
         $this->newLine();
 
-        if (! Schema::hasTable('cloudinary_media_mappings')) {
-            $this->error('Lỗi: Bảng [cloudinary_media_mappings] chưa tồn tại trên cơ sở dữ liệu hiện tại.');
-            $this->line('Vui lòng chạy: php artisan migrate --force');
+        try {
+            DB::connection()->getPdo();
+            $this->info(sprintf(
+                'Đã kết nối thành công tới Database: [%s] (%s)',
+                DB::getDefaultConnection(),
+                DB::connection()->getDatabaseName()
+            ));
+        } catch (Throwable $e) {
+            $this->error('Lỗi: Không thể kết nối tới cơ sở dữ liệu mục tiêu: ' . $e->getMessage());
+            DB::setDefaultConnection($originalConnection);
 
             return self::FAILURE;
         }
 
-        $publicDir = storage_path('app/public');
-        $reportEntries = [];
-        $stats = [
-            'total_inspected' => 0,
-            'clean' => 0,
-            'missing_mappings' => 0,
-            'double_extensions' => 0,
-            'invalid_resource_types' => 0,
-            'mismatched_assets' => 0,
-            'fixed' => 0,
-            'failed' => 0,
-        ];
+        try {
+            if (! Schema::hasTable('cloudinary_media_mappings')) {
+                $this->error('Lỗi: Bảng [cloudinary_media_mappings] chưa tồn tại trên cơ sở dữ liệu hiện tại.');
+                $this->line('Vui lòng chạy: php artisan migrate --force');
 
-        // 1. Audit Sutra ID 7 (Kinh A Di Đà) special case
-        $this->auditSutra7($storageService, $shouldFix, $force, $stats, $reportEntries);
-
-        // 2. Audit existing mappings in cloudinary_media_mappings table
-        $this->auditExistingMappings($storageService, $shouldFix, $stats, $reportEntries);
-
-        // 3. Audit all media paths across database tables
-        $this->auditDatabaseMedia($storageService, $shouldFix, $force, $stats, $reportEntries);
-
-        // 4. Audit local files in storage/app/public
-        $this->auditLocalFiles($storageService, $shouldFix, $force, $stats, $reportEntries);
-
-        // Deduplicate report entries by path
-        $uniqueEntries = [];
-        foreach ($reportEntries as $entry) {
-            $key = ($entry['path'] ?? '') . '|' . ($entry['issue_type'] ?? '');
-            if (! isset($uniqueEntries[$key])) {
-                $uniqueEntries[$key] = $entry;
+                return self::FAILURE;
             }
+
+            $reportEntries = [];
+            $stats = [
+                'total_inspected' => 0,
+                'clean' => 0,
+                'missing_mappings' => 0,
+                'double_extensions' => 0,
+                'invalid_resource_types' => 0,
+                'mismatched_assets' => 0,
+                'api_errors' => 0,
+                'fixed' => 0,
+                'failed' => 0,
+            ];
+
+            // 0. Recover any pending failed mappings from fallback file
+            $this->auditPendingRecovery($storageService, $shouldFix, $stats, $reportEntries);
+
+            // 1. Audit Sutra ID 7 (Kinh A Di Đà) special case
+            $this->auditSutra7($storageService, $shouldFix, $force, $stats, $reportEntries);
+
+            // 2. Audit existing mappings in cloudinary_media_mappings table
+            $this->auditExistingMappings($storageService, $shouldFix, $stats, $reportEntries);
+
+            // 3. Audit all media paths across database tables
+            $this->auditDatabaseMedia($storageService, $shouldFix, $force, $stats, $reportEntries);
+
+            // 4. Audit local files in storage/app/public
+            $this->auditLocalFiles($storageService, $shouldFix, $force, $stats, $reportEntries);
+
+            // Deduplicate report entries by path + issue_type
+            $uniqueEntries = [];
+            foreach ($reportEntries as $entry) {
+                $key = ($entry['path'] ?? '') . '|' . ($entry['issue_type'] ?? '');
+                if (! isset($uniqueEntries[$key])) {
+                    $uniqueEntries[$key] = $entry;
+                }
+            }
+            $reportEntries = array_values($uniqueEntries);
+
+            // Summary report
+            $this->newLine();
+            $this->info('===============================================================');
+            $this->info(' Reconciliation Summary Report                                 ');
+            $this->info('===============================================================');
+            $this->line(sprintf('Tổng số hạng mục đã kiểm tra:      %d', $stats['total_inspected']));
+            $this->line(sprintf('Hợp lệ, chuẩn xác:                 %d', $stats['clean']));
+            $this->line(sprintf('Thiếu mapping trên database:       %d', $stats['missing_mappings']));
+            $this->line(sprintf('Lỗi đuôi lặp (.jpg.jpg, ...):      %d', $stats['double_extensions']));
+            $this->line(sprintf('Sai resource_type (audio/image):   %d', $stats['invalid_resource_types']));
+            $this->line(sprintf('Sai asset / trỏ nhầm hình ảnh:     %d', $stats['mismatched_assets']));
+            if ($stats['api_errors'] > 0) {
+                $this->line(sprintf('Lỗi API/RateLimit/Credentials:     <fg=yellow;options=bold>%d</>', $stats['api_errors']));
+            }
+            if ($shouldFix) {
+                $this->line(sprintf('Đã khắc phục thành công:           <fg=green;options=bold>%d</>', $stats['fixed']));
+                $this->line(sprintf('Khắc phục thất bại / lỗi:          <fg=red;options=bold>%d</>', $stats['failed']));
+            }
+            $this->newLine();
+
+            // Write CSV report
+            $csvPath = $csvOption ?: storage_path('app/cloudinary_reconciliation_report.csv');
+            $this->exportCsvReport($csvPath, $reportEntries);
+            $this->info("Báo cáo chi tiết CSV đã ghi tại: [{$csvPath}]");
+
+            // Write JSON manifest
+            $manifestPath = storage_path('app/cloudinary_reconciliation_manifest.json');
+            File::ensureDirectoryExists(dirname($manifestPath));
+            File::put($manifestPath, json_encode([
+                'generated_at' => now()->toIso8601String(),
+                'mode' => $shouldFix ? 'fix' : 'dry-run',
+                'target_connection' => DB::getDefaultConnection(),
+                'target_database' => DB::connection()->getDatabaseName(),
+                'stats' => $stats,
+                'entries' => $reportEntries,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $this->info("Manifest JSON đã ghi tại:       [{$manifestPath}]");
+
+            return $stats['failed'] > 0 ? self::FAILURE : self::SUCCESS;
+        } finally {
+            DB::setDefaultConnection($originalConnection);
         }
-        $reportEntries = array_values($uniqueEntries);
-
-        // Summary report
-        $this->newLine();
-        $this->info('===============================================================');
-        $this->info(' Reconciliation Summary Report                                 ');
-        $this->info('===============================================================');
-        $this->line(sprintf('Tổng số hạng mục đã kiểm tra:      %d', $stats['total_inspected']));
-        $this->line(sprintf('Hợp lệ, chuẩn xác:                 %d', $stats['clean']));
-        $this->line(sprintf('Thiếu mapping trên database:       %d', $stats['missing_mappings']));
-        $this->line(sprintf('Lỗi đuôi lặp (.jpg.jpg, ...):      %d', $stats['double_extensions']));
-        $this->line(sprintf('Sai resource_type (audio/image):   %d', $stats['invalid_resource_types']));
-        $this->line(sprintf('Sai asset / trỏ nhầm hình ảnh:     %d', $stats['mismatched_assets']));
-        if ($shouldFix) {
-            $this->line(sprintf('Đã khắc phục thành công:           <fg=green;options=bold>%d</>', $stats['fixed']));
-            $this->line(sprintf('Khắc phục thất bại / lỗi:          <fg=red;options=bold>%d</>', $stats['failed']));
-        }
-        $this->newLine();
-
-        // Write CSV report
-        $csvPath = $csvOption ?: storage_path('app/cloudinary_reconciliation_report.csv');
-        $this->exportCsvReport($csvPath, $reportEntries);
-        $this->info("Báo cáo chi tiết CSV đã ghi tại: [{$csvPath}]");
-
-        // Write JSON manifest
-        $manifestPath = storage_path('app/cloudinary_reconciliation_manifest.json');
-        File::ensureDirectoryExists(dirname($manifestPath));
-        File::put($manifestPath, json_encode([
-            'generated_at' => now()->toIso8601String(),
-            'mode' => $shouldFix ? 'fix' : 'dry-run',
-            'stats' => $stats,
-            'entries' => $reportEntries,
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        $this->info("Manifest JSON đã ghi tại:       [{$manifestPath}]");
-
-        return $stats['failed'] > 0 ? self::FAILURE : self::SUCCESS;
     }
 
     /**
-     * Audit Sutra 7 (Kinh A Di Đà) thumbnail to prevent pointing to buddhist-figures asset.
+     * Recover any pending failed mappings written to fallback storage.
+     */
+    protected function auditPendingRecovery(
+        MediaStorageService $storageService,
+        bool $shouldFix,
+        array &$stats,
+        array &$reportEntries
+    ): void {
+        $recoveryFile = storage_path('app/pending_media_mappings_recovery.json');
+        if (! File::exists($recoveryFile)) {
+            return;
+        }
+
+        try {
+            $items = json_decode((string) File::get($recoveryFile), true);
+            if (! is_array($items) || empty($items)) {
+                return;
+            }
+
+            $this->line(sprintf('<fg=cyan>[0/4] Phát hiện %d mapping trong hàng đợi khôi phục sự cố...</>', count($items)));
+            $remaining = [];
+
+            foreach ($items as $localPath => $payload) {
+                $stats['total_inspected']++;
+                $this->warn("  ! Tìm thấy mapping chưa lưu từ phiên upload trước: [{$localPath}]");
+
+                if ($shouldFix) {
+                    try {
+                        CloudinaryMediaMapping::updateOrCreate(
+                            ['local_path' => $localPath],
+                            [
+                                'public_id' => $payload['public_id'],
+                                'resource_type' => $payload['resource_type'],
+                                'format' => $payload['format'],
+                                'secure_url' => $payload['secure_url'],
+                                'checksum' => $payload['checksum'] ?? null,
+                                'file_size' => $payload['file_size'] ?? null,
+                                'status' => 'synced',
+                                'error_message' => null,
+                            ]
+                        );
+                        $stats['fixed']++;
+                        $this->info("    -> Đã khôi phục thành công mapping cho [{$localPath}]");
+                        $reportEntries[] = [
+                            'path' => $localPath,
+                            'source' => 'recovery_queue',
+                            'issue_type' => 'FAILED_PERSISTENCE_RECOVERED',
+                            'status' => 'FIXED',
+                            'old_url' => null,
+                            'new_url' => $payload['secure_url'],
+                            'notes' => 'Recovered from persistent fallback queue',
+                        ];
+                    } catch (Throwable $e) {
+                        $remaining[$localPath] = $payload;
+                        $stats['failed']++;
+                        $this->error("    -> Khôi phục thất bại cho [{$localPath}]: " . $e->getMessage());
+                    }
+                } else {
+                    $remaining[$localPath] = $payload;
+                    $reportEntries[] = [
+                        'path' => $localPath,
+                        'source' => 'recovery_queue',
+                        'issue_type' => 'FAILED_PERSISTENCE_PENDING',
+                        'status' => 'PENDING_RECOVERY',
+                        'old_url' => null,
+                        'new_url' => $payload['secure_url'] ?? null,
+                        'notes' => 'Awaiting recovery via --fix',
+                    ];
+                }
+            }
+
+            if ($shouldFix) {
+                if (empty($remaining)) {
+                    File::delete($recoveryFile);
+                } else {
+                    File::put($recoveryFile, json_encode($remaining, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                }
+            }
+        } catch (Throwable $e) {
+            $this->warn('  - Lỗi khi đọc file khôi phục: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Audit Sutra 7 (Kinh A Di Đà) thumbnail to prevent pointing to buddhist-figures asset,
+     * correctly report missing mapping if none exists, and handle API errors gracefully.
      */
     protected function auditSutra7(
         MediaStorageService $storageService,
@@ -157,7 +298,6 @@ class ReconcileMediaMappingsCommand extends Command
         try {
             $sutra = Sutra::query()->find(7);
             if (! $sutra) {
-                // Try finding by title
                 $sutra = Sutra::query()->where('title', 'like', '%A Di Đà%')->first();
             }
 
@@ -167,50 +307,190 @@ class ReconcileMediaMappingsCommand extends Command
                 return;
             }
 
-            $thumb = (string) $sutra->thumbnail;
+            $thumb = trim((string) $sutra->thumbnail);
             $this->line("  - Bản ghi: ID {$sutra->id} [{$sutra->title}], thumbnail: [{$thumb}]");
+
+            if (blank($thumb)) {
+                $this->warn('  ! Bản ghi Kinh A Di Đà không có thumbnail được gán.');
+
+                return;
+            }
+
+            $cleanThumb = ltrim(MediaUrlResolver::cleanDoubleExtension($thumb), '/');
+            if (Str::startsWith($cleanThumb, 'storage/')) {
+                $cleanThumb = substr($cleanThumb, 8);
+            }
 
             $mapping = CloudinaryMediaMapping::query()
                 ->where('local_path', $thumb)
+                ->orWhere('local_path', $cleanThumb)
                 ->first();
 
             $isMismatched = false;
             if ($mapping) {
-                // If mapping points to buddhist-figures, it was manually paired to the wrong figure asset
                 if (Str::contains((string) $mapping->public_id, 'buddhist-figures') ||
                     Str::contains((string) $mapping->secure_url, 'buddhist-figures')) {
                     $isMismatched = true;
                 }
             }
 
-            if ($isMismatched) {
-                $stats['mismatched_assets']++;
-                $this->warn("  ! CẢNH BÁO: Thumbnail của Kinh A Di Đà đang trỏ nhầm sang asset của Phật/Bồ Tát: [{$mapping->public_id}]");
+            // Case A: NO MAPPING EXISTS
+            if (! $mapping) {
+                $stats['missing_mappings']++;
+                $this->warn("  ! CẢNH BÁO: Kinh A Di Đà chưa có mapping trong database cho đường dẫn: [{$thumb}]");
 
-                $localFile = storage_path('app/public/' . ltrim($thumb, '/'));
-                if (file_exists($localFile) && is_file($localFile)) {
-                    $this->line("  - Đã tìm thấy file gốc thực tế: [{$localFile}] (" . filesize($localFile) . ' bytes)');
+                // Check 1: Does authentic asset already exist on Cloudinary?
+                $inspection = $storageService->inspectCloudinaryAsset($cleanThumb, 'image');
 
+                if (in_array($inspection['status'], ['rate_limited', 'auth_error', 'api_error'], true)) {
+                    $stats['api_errors']++;
+                    $this->warn("  ! Không thể kiểm tra Cloudinary do lỗi API ({$inspection['status']}): {$inspection['error']}. Bỏ qua sửa đổi để bảo vệ dữ liệu.");
+                    $reportEntries[] = [
+                        'path' => $thumb,
+                        'source' => 'sutras.id=7',
+                        'issue_type' => 'API_' . strtoupper($inspection['status']),
+                        'status' => 'SKIPPED_API_ERROR',
+                        'old_url' => null,
+                        'new_url' => null,
+                        'notes' => $inspection['error'],
+                    ];
+
+                    return;
+                }
+
+                if ($inspection['status'] === 'found' && $inspection['asset']) {
+                    $existingCloudAsset = $inspection['asset'];
+                    $this->info("  - Tìm thấy asset chuẩn xác đã có sẵn trên Cloudinary: [{$existingCloudAsset['secure_url']}]");
                     if ($shouldFix) {
-                        if ($storageService->isConfigured()) {
-                            $this->line('  - Đang tải ảnh gốc Kinh A Di Đà lên Cloudinary...');
-                            $res = $storageService->uploadToCloudinary($localFile, $thumb, ['overwrite' => true]);
-                            $this->info("  -> Đã khắc phục mapping cho Kinh A Di Đà: [{$res['secure_url']}]");
-                            $stats['fixed']++;
-
+                        CloudinaryMediaMapping::updateOrCreate(
+                            ['local_path' => $cleanThumb],
+                            [
+                                'public_id' => $existingCloudAsset['public_id'],
+                                'resource_type' => 'image',
+                                'format' => $existingCloudAsset['format'],
+                                'secure_url' => $existingCloudAsset['secure_url'],
+                                'file_size' => $existingCloudAsset['bytes'],
+                                'status' => 'synced',
+                            ]
+                        );
+                        $stats['fixed']++;
+                        $this->info('  -> Đã khôi phục mapping cho Kinh A Di Đà từ asset Cloudinary hiện có.');
+                        $reportEntries[] = [
+                            'path' => $thumb,
+                            'source' => 'sutras.id=7',
+                            'issue_type' => 'MISSING_MAPPING',
+                            'status' => 'MAPPED_FROM_CLOUD',
+                            'old_url' => null,
+                            'new_url' => $existingCloudAsset['secure_url'],
+                            'notes' => 'Restored mapping from existing Cloudinary asset without re-upload',
+                        ];
+                    } else {
+                        $reportEntries[] = [
+                            'path' => $thumb,
+                            'source' => 'sutras.id=7',
+                            'issue_type' => 'MISSING_MAPPING',
+                            'status' => 'CAN_BE_MAPPED_FROM_CLOUD',
+                            'old_url' => null,
+                            'new_url' => $existingCloudAsset['secure_url'],
+                            'notes' => 'Asset exists on Cloudinary; ready to map without re-upload',
+                        ];
+                    }
+                } else {
+                    // Check 2: Does local file exist?
+                    $localFile = storage_path('app/public/' . $cleanThumb);
+                    if (file_exists($localFile) && is_file($localFile)) {
+                        $this->line("  - Đã tìm thấy file gốc local: [{$localFile}] (" . filesize($localFile) . ' bytes)');
+                        if ($shouldFix) {
+                            if ($storageService->isConfigured()) {
+                                $this->line('  - Đang tải ảnh gốc Kinh A Di Đà lên Cloudinary...');
+                                $res = $storageService->uploadToCloudinary($localFile, $cleanThumb, ['overwrite' => $force]);
+                                $this->info("  -> Đã upload và tạo mapping cho Kinh A Di Đà: [{$res['secure_url']}]");
+                                $stats['fixed']++;
+                                $reportEntries[] = [
+                                    'path' => $thumb,
+                                    'source' => 'sutras.id=7',
+                                    'issue_type' => 'MISSING_MAPPING',
+                                    'status' => 'UPLOADED_AND_MAPPED',
+                                    'old_url' => null,
+                                    'new_url' => $res['secure_url'],
+                                    'notes' => 'Uploaded authentic local sutra thumbnail and mapped',
+                                ];
+                            } else {
+                                $stats['failed']++;
+                                $this->warn('  - Không thể upload: thiếu cấu hình Cloudinary credentials.');
+                            }
+                        } else {
                             $reportEntries[] = [
                                 'path' => $thumb,
                                 'source' => 'sutras.id=7',
-                                'issue_type' => 'MISMATCHED_ASSET',
-                                'status' => 'FIXED',
-                                'old_url' => $mapping->secure_url,
-                                'new_url' => $res['secure_url'],
-                                'notes' => 'Remapped to authentic sutra thumbnail',
+                                'issue_type' => 'MISSING_MAPPING',
+                                'status' => 'LOCAL_EXISTS_UNMAPPED',
+                                'old_url' => null,
+                                'new_url' => null,
+                                'notes' => 'Thumbnail missing mapping; local file exists for upload',
                             ];
-                        } else {
-                            $this->warn('  - Không thể upload vì chưa cấu hình Cloudinary credentials.');
-                            $stats['failed']++;
                         }
+                    } else {
+                        // Missing both local and Cloudinary
+                        $this->warn('  ! Không tìm thấy ảnh Kinh A Di Đà trên Cloudinary lẫn local disk.');
+                        $reportEntries[] = [
+                            'path' => $thumb,
+                            'source' => 'sutras.id=7',
+                            'issue_type' => 'MISSING_MAPPING_NO_SOURCE',
+                            'status' => 'MANUAL_ATTENTION',
+                            'old_url' => null,
+                            'new_url' => null,
+                            'notes' => 'Asset not found on Cloudinary and no local source file found; manual attention required',
+                        ];
+                    }
+                }
+            } elseif ($isMismatched) {
+                // Case B: MISMATCHED ASSET (e.g. pointing to buddhist-figures)
+                $stats['mismatched_assets']++;
+                $this->warn("  ! CẢNH BÁO: Thumbnail Kinh A Di Đà đang trỏ nhầm sang asset Phật/Bồ Tát: [{$mapping->public_id}]");
+
+                // Check 1: Is there an authentic sutra asset on Cloudinary?
+                $inspection = $storageService->inspectCloudinaryAsset($cleanThumb, 'image');
+
+                if (in_array($inspection['status'], ['rate_limited', 'auth_error', 'api_error'], true)) {
+                    $stats['api_errors']++;
+                    $this->warn("  ! Lỗi Cloudinary API ({$inspection['status']}). Bỏ qua sửa đổi Kinh A Di Đà.");
+                    $reportEntries[] = [
+                        'path' => $thumb,
+                        'source' => 'sutras.id=7',
+                        'issue_type' => 'API_' . strtoupper($inspection['status']),
+                        'status' => 'SKIPPED_API_ERROR',
+                        'old_url' => $mapping->secure_url,
+                        'new_url' => null,
+                        'notes' => $inspection['error'],
+                    ];
+
+                    return;
+                }
+
+                if ($inspection['status'] === 'found' && $inspection['asset']) {
+                    $existingCloudAsset = $inspection['asset'];
+                    $this->info("  - Tìm thấy asset chuẩn xác đã có sẵn trên Cloudinary: [{$existingCloudAsset['secure_url']}]");
+                    if ($shouldFix) {
+                        $mapping->update([
+                            'public_id' => $existingCloudAsset['public_id'],
+                            'resource_type' => 'image',
+                            'format' => $existingCloudAsset['format'],
+                            'secure_url' => $existingCloudAsset['secure_url'],
+                            'file_size' => $existingCloudAsset['bytes'],
+                            'status' => 'synced',
+                        ]);
+                        $stats['fixed']++;
+                        $this->info("  -> Đã sửa mapping Kinh A Di Đà sang đúng asset Cloudinary: [{$existingCloudAsset['secure_url']}]");
+                        $reportEntries[] = [
+                            'path' => $thumb,
+                            'source' => 'sutras.id=7',
+                            'issue_type' => 'MISMATCHED_ASSET',
+                            'status' => 'FIXED',
+                            'old_url' => $mapping->secure_url,
+                            'new_url' => $existingCloudAsset['secure_url'],
+                            'notes' => 'Remapped to authentic sutra asset from Cloudinary without re-upload',
+                        ];
                     } else {
                         $reportEntries[] = [
                             'path' => $thumb,
@@ -218,25 +498,64 @@ class ReconcileMediaMappingsCommand extends Command
                             'issue_type' => 'MISMATCHED_ASSET',
                             'status' => 'DETECTED',
                             'old_url' => $mapping->secure_url,
-                            'new_url' => null,
-                            'notes' => 'Thumbnail mapped to buddhist-figures asset instead of sutras/thumbnails/',
+                            'new_url' => $existingCloudAsset['secure_url'],
+                            'notes' => 'Thumbnail mapped to wrong figure asset; authentic sutra asset available on Cloudinary',
                         ];
                     }
                 } else {
-                    $this->warn("  - File ảnh gốc [{$localFile}] không tồn tại trên local disk.");
-                    $reportEntries[] = [
-                        'path' => $thumb,
-                        'source' => 'sutras.id=7',
-                        'issue_type' => 'MISMATCHED_ASSET_NO_LOCAL',
-                        'status' => 'MANUAL_ATTENTION',
-                        'old_url' => $mapping->secure_url,
-                        'new_url' => null,
-                        'notes' => 'Local authentic sutra file missing, manual upload required',
-                    ];
+                    // Check 2: Local file
+                    $localFile = storage_path('app/public/' . $cleanThumb);
+                    if (file_exists($localFile) && is_file($localFile)) {
+                        $this->line("  - Đã tìm thấy file gốc thực tế: [{$localFile}] (" . filesize($localFile) . ' bytes)');
+
+                        if ($shouldFix) {
+                            if ($storageService->isConfigured()) {
+                                $this->line('  - Đang tải ảnh gốc Kinh A Di Đà lên Cloudinary...');
+                                $res = $storageService->uploadToCloudinary($localFile, $cleanThumb, ['overwrite' => $force]);
+                                $this->info("  -> Đã khắc phục mapping cho Kinh A Di Đà: [{$res['secure_url']}]");
+                                $stats['fixed']++;
+
+                                $reportEntries[] = [
+                                    'path' => $thumb,
+                                    'source' => 'sutras.id=7',
+                                    'issue_type' => 'MISMATCHED_ASSET',
+                                    'status' => 'FIXED',
+                                    'old_url' => $mapping->secure_url,
+                                    'new_url' => $res['secure_url'],
+                                    'notes' => 'Remapped to authentic sutra thumbnail from local upload',
+                                ];
+                            } else {
+                                $this->warn('  - Không thể upload vì chưa cấu hình Cloudinary credentials.');
+                                $stats['failed']++;
+                            }
+                        } else {
+                            $reportEntries[] = [
+                                'path' => $thumb,
+                                'source' => 'sutras.id=7',
+                                'issue_type' => 'MISMATCHED_ASSET',
+                                'status' => 'DETECTED',
+                                'old_url' => $mapping->secure_url,
+                                'new_url' => null,
+                                'notes' => 'Thumbnail mapped to buddhist-figures asset instead of sutras/thumbnails/',
+                            ];
+                        }
+                    } else {
+                        $this->warn("  - File ảnh gốc [{$localFile}] không tồn tại trên local disk.");
+                        $reportEntries[] = [
+                            'path' => $thumb,
+                            'source' => 'sutras.id=7',
+                            'issue_type' => 'MISMATCHED_ASSET_NO_LOCAL',
+                            'status' => 'MANUAL_ATTENTION',
+                            'old_url' => $mapping->secure_url,
+                            'new_url' => null,
+                            'notes' => 'Local authentic sutra file missing, manual attention required',
+                        ];
+                    }
                 }
             } else {
+                // Case C: Clean and valid
                 $stats['clean']++;
-                $this->line('  - Mapping của Kinh A Di Đà chuẩn xác hoặc chưa phát hiện sai lệch.');
+                $this->line("  - Mapping của Kinh A Di Đà chuẩn xác và hợp lệ: [{$mapping->secure_url}]");
             }
         } catch (Throwable $e) {
             $this->warn('  - Lỗi khi kiểm tra Kinh A Di Đà: ' . $e->getMessage());
@@ -245,6 +564,7 @@ class ReconcileMediaMappingsCommand extends Command
 
     /**
      * Audit all rows in cloudinary_media_mappings for double extensions and wrong resource_types.
+     * Verifies against Cloudinary asset metadata before modifying, and preserves URLs on API errors.
      */
     protected function auditExistingMappings(
         MediaStorageService $storageService,
@@ -270,9 +590,9 @@ class ReconcileMediaMappingsCommand extends Command
                 $hasDoubleExt = false;
                 $cleanedUrl = MediaUrlResolver::cleanDoubleExtension($url);
                 $cleanedPublicId = MediaUrlResolver::extractPublicId($publicId);
+
                 if ($cleanedUrl !== $url || $cleanedPublicId !== $publicId) {
                     $hasDoubleExt = true;
-                    $stats['double_extensions']++;
                 }
 
                 $hasWrongType = false;
@@ -281,9 +601,29 @@ class ReconcileMediaMappingsCommand extends Command
                     $stats['invalid_resource_types']++;
                 }
 
+                if ($hasDoubleExt) {
+                    // Check Cloudinary API before altering
+                    $inspClean = $storageService->isConfigured() ? $storageService->inspectCloudinaryAsset($cleanedPublicId, $resourceType) : ['status' => 'unconfigured'];
+                    $inspLiteral = $storageService->isConfigured() ? $storageService->inspectCloudinaryAsset($publicId, $resourceType) : ['status' => 'unconfigured'];
+
+                    // If rate limited or API error occurred, do NOT strip or alter!
+                    if (in_array($inspClean['status'], ['rate_limited', 'auth_error', 'api_error'], true) ||
+                        in_array($inspLiteral['status'], ['rate_limited', 'auth_error', 'api_error'], true)) {
+                        $stats['api_errors']++;
+                        $this->warn("  ! Bỏ qua kiểm tra đuôi mở rộng cho [{$path}] do lỗi Cloudinary API ({$inspClean['status']}). Giữ nguyên URL hợp lệ.");
+                        $hasDoubleExt = false;
+                    } elseif ($inspLiteral['status'] === 'found' && $inspClean['status'] !== 'found') {
+                        // The asset genuinely has the extension in its public_id on Cloudinary. Keep Cloudinary's delivery URL!
+                        $this->line("  - Asset [{$path}] được Cloudinary lưu với public_id thực tế chứa đuôi mở rộng [{$publicId}]. Giữ nguyên delivery URL chuẩn từ Cloudinary.");
+                        $hasDoubleExt = false;
+                    } else {
+                        $stats['double_extensions']++;
+                    }
+                }
+
                 if ($hasDoubleExt || $hasWrongType) {
                     $this->warn("  ! Bất thường tại [{$path}]: " .
-                        ($hasDoubleExt ? "[Đuôi lặp .jpg.jpg] " : '') .
+                        ($hasDoubleExt ? '[Đuôi lặp cần chuẩn hóa] ' : '') .
                         ($hasWrongType ? "[Sai resource_type: hiện tại={$resourceType}, đúng={$expectedType}]" : ''));
 
                     if ($shouldFix) {
@@ -294,7 +634,6 @@ class ReconcileMediaMappingsCommand extends Command
                         }
                         if ($hasWrongType) {
                             $updateData['resource_type'] = $expectedType;
-                            // Also adjust URL endpoint if video vs image
                             if ($expectedType === 'video' && Str::contains($updateData['secure_url'] ?? $url, '/image/upload/')) {
                                 $updateData['secure_url'] = str_replace('/image/upload/', '/video/upload/', $updateData['secure_url'] ?? $url);
                             }
@@ -311,7 +650,7 @@ class ReconcileMediaMappingsCommand extends Command
                             'status' => 'FIXED',
                             'old_url' => $url,
                             'new_url' => $mapping->secure_url,
-                            'notes' => 'Sanitized double extension or resource_type',
+                            'notes' => 'Sanitized double extension or resource_type after verification',
                         ];
                     } else {
                         $reportEntries[] = [
@@ -335,6 +674,7 @@ class ReconcileMediaMappingsCommand extends Command
 
     /**
      * Audit media paths across database tables to find records with missing mappings.
+     * Prioritizes existing Cloudinary assets before attempting uploads, and handles API errors safely.
      */
     protected function auditDatabaseMedia(
         MediaStorageService $storageService,
@@ -391,6 +731,68 @@ class ReconcileMediaMappingsCommand extends Command
                         $stats['missing_mappings']++;
                         $this->warn("  ! Thiếu mapping cho [{$name}]: {$cleanPath}");
 
+                        // Priority 1: Check if asset already exists on Cloudinary
+                        $inspection = $storageService->inspectCloudinaryAsset($cleanPath);
+
+                        if (in_array($inspection['status'], ['rate_limited', 'auth_error', 'api_error'], true)) {
+                            $stats['api_errors']++;
+                            $this->warn("    ! Không thể kiểm tra Cloudinary do lỗi API ({$inspection['status']}): {$inspection['error']}");
+                            $reportEntries[] = [
+                                'path' => $cleanPath,
+                                'source' => $name,
+                                'issue_type' => 'API_' . strtoupper($inspection['status']),
+                                'status' => 'SKIPPED_API_ERROR',
+                                'old_url' => null,
+                                'new_url' => null,
+                                'notes' => $inspection['error'],
+                            ];
+
+                            continue;
+                        }
+
+                        if ($inspection['status'] === 'found' && $inspection['asset']) {
+                            $cloudAsset = $inspection['asset'];
+                            $cloudUrl = $cloudAsset['secure_url'];
+                            if ($shouldFix) {
+                                CloudinaryMediaMapping::updateOrCreate(
+                                    ['local_path' => $cleanPath],
+                                    [
+                                        'public_id' => $cloudAsset['public_id'],
+                                        'resource_type' => $cloudAsset['resource_type'],
+                                        'format' => $cloudAsset['format'],
+                                        'secure_url' => $cloudUrl,
+                                        'file_size' => $cloudAsset['bytes'],
+                                        'status' => 'synced',
+                                    ]
+                                );
+                                $stats['fixed']++;
+                                $this->info("    -> Đã khôi phục mapping từ asset sẵn có trên Cloudinary: {$cloudUrl}");
+
+                                $reportEntries[] = [
+                                    'path' => $cleanPath,
+                                    'source' => $name,
+                                    'issue_type' => 'MISSING_MAPPING_CLOUD_FOUND',
+                                    'status' => 'MAPPED_FROM_CLOUD',
+                                    'old_url' => null,
+                                    'new_url' => $cloudUrl,
+                                    'notes' => 'Asset verified on Cloudinary; mapping restored without upload',
+                                ];
+                            } else {
+                                $reportEntries[] = [
+                                    'path' => $cleanPath,
+                                    'source' => $name,
+                                    'issue_type' => 'MISSING_MAPPING_CLOUD_FOUND',
+                                    'status' => 'CAN_BE_MAPPED_FROM_CLOUD',
+                                    'old_url' => null,
+                                    'new_url' => $cloudUrl,
+                                    'notes' => 'Asset verified on Cloudinary, ready for mapping creation',
+                                ];
+                            }
+
+                            continue;
+                        }
+
+                        // Priority 2: Check if local file exists
                         $localFile = storage_path('app/public/' . $cleanPath);
                         if (file_exists($localFile) && is_file($localFile)) {
                             if ($shouldFix) {
@@ -423,58 +825,22 @@ class ReconcileMediaMappingsCommand extends Command
                                     'notes' => 'Local file exists; needs upload and mapping',
                                 ];
                             }
-                        } else {
-                            // Check if asset already exists on Cloudinary by public ID
-                            $existsOnCloud = $storageService->existsInCloudinary($cleanPath);
-                            if ($existsOnCloud) {
-                                $cloudUrl = MediaUrlResolver::buildCloudinaryUrl($cleanPath);
-                                if ($shouldFix) {
-                                    CloudinaryMediaMapping::updateOrCreate(
-                                        ['local_path' => $cleanPath],
-                                        [
-                                            'public_id' => MediaUrlResolver::extractPublicId($cleanPath),
-                                            'resource_type' => MediaUrlResolver::getResourceType($cleanPath),
-                                            'format' => pathinfo($cleanPath, PATHINFO_EXTENSION),
-                                            'secure_url' => $cloudUrl,
-                                            'status' => 'synced',
-                                        ]
-                                    );
-                                    $stats['fixed']++;
-                                    $this->info("    -> Đã tạo mapping từ asset sẵn có trên Cloudinary: {$cloudUrl}");
 
-                                    $reportEntries[] = [
-                                        'path' => $cleanPath,
-                                        'source' => $name,
-                                        'issue_type' => 'MISSING_MAPPING_CLOUD_FOUND',
-                                        'status' => 'MAPPED_FROM_CLOUD',
-                                        'old_url' => null,
-                                        'new_url' => $cloudUrl,
-                                        'notes' => 'Asset already on Cloudinary; mapping restored',
-                                    ];
-                                } else {
-                                    $reportEntries[] = [
-                                        'path' => $cleanPath,
-                                        'source' => $name,
-                                        'issue_type' => 'MISSING_MAPPING_CLOUD_FOUND',
-                                        'status' => 'CAN_BE_MAPPED_FROM_CLOUD',
-                                        'old_url' => null,
-                                        'new_url' => $cloudUrl,
-                                        'notes' => 'Asset verified on Cloudinary, ready for mapping creation',
-                                    ];
-                                }
-                            } else {
-                                $this->line("    - File không tồn tại cả ở local lẫn Cloudinary: {$cleanPath}");
-                                $reportEntries[] = [
-                                    'path' => $cleanPath,
-                                    'source' => $name,
-                                    'issue_type' => 'ORPHAN_UNAVAILABLE',
-                                    'status' => 'UNRESOLVED',
-                                    'old_url' => null,
-                                    'new_url' => null,
-                                    'notes' => 'File missing from both local disk and Cloudinary',
-                                ];
-                            }
+                            continue;
                         }
+
+                        // Priority 3: Neither Cloudinary asset nor local file exists.
+                        // Do NOT fabricate an unverified URL. Mark as MANUAL_ATTENTION.
+                        $this->warn("    ! Không tìm thấy trên Cloudinary và file local gốc không tồn tại: {$cleanPath}");
+                        $reportEntries[] = [
+                            'path' => $cleanPath,
+                            'source' => $name,
+                            'issue_type' => 'UNVERIFIED_SOURCE_MISSING',
+                            'status' => 'MANUAL_ATTENTION',
+                            'old_url' => null,
+                            'new_url' => null,
+                            'notes' => 'Asset not verified on Cloudinary and local source file is missing. Manual intervention required.',
+                        ];
                     } else {
                         $stats['clean']++;
                     }
@@ -536,22 +902,49 @@ class ReconcileMediaMappingsCommand extends Command
                 if ($shouldFix) {
                     if ($storageService->isConfigured()) {
                         try {
-                            $res = $storageService->uploadToCloudinary($file->getRealPath(), $cleanPath, ['overwrite' => $force]);
-                            $this->info("    -> Đã tải lên và tạo mapping: {$res['secure_url']}");
-                            $stats['fixed']++;
+                            $inspection = $storageService->inspectCloudinaryAsset($cleanPath);
+                            if ($inspection['status'] === 'found' && $inspection['asset'] && ! $force) {
+                                $cloudAsset = $inspection['asset'];
+                                CloudinaryMediaMapping::updateOrCreate(
+                                    ['local_path' => $cleanPath],
+                                    [
+                                        'public_id' => $cloudAsset['public_id'],
+                                        'resource_type' => $cloudAsset['resource_type'],
+                                        'format' => $cloudAsset['format'],
+                                        'secure_url' => $cloudAsset['secure_url'],
+                                        'file_size' => $cloudAsset['bytes'],
+                                        'status' => 'synced',
+                                    ]
+                                );
+                                $stats['fixed']++;
+                                $this->info("    -> Đã tạo mapping từ asset sẵn có trên Cloudinary: {$cloudAsset['secure_url']}");
+                                $reportEntries[] = [
+                                    'path' => $cleanPath,
+                                    'source' => 'storage/app/public',
+                                    'issue_type' => 'UNMAPPED_LOCAL_FILE',
+                                    'status' => 'MAPPED_FROM_CLOUD',
+                                    'old_url' => null,
+                                    'new_url' => $cloudAsset['secure_url'],
+                                    'notes' => 'Asset already exists on Cloudinary; mapping recorded without re-upload',
+                                ];
+                            } else {
+                                $res = $storageService->uploadToCloudinary($file->getRealPath(), $cleanPath, ['overwrite' => $force]);
+                                $this->info("    -> Đã tải lên và tạo mapping: {$res['secure_url']}");
+                                $stats['fixed']++;
 
-                            $reportEntries[] = [
-                                'path' => $cleanPath,
-                                'source' => 'storage/app/public',
-                                'issue_type' => 'UNMAPPED_LOCAL_FILE',
-                                'status' => 'UPLOADED_AND_MAPPED',
-                                'old_url' => null,
-                                'new_url' => $res['secure_url'],
-                                'notes' => 'Local file uploaded and mapping recorded',
-                            ];
+                                $reportEntries[] = [
+                                    'path' => $cleanPath,
+                                    'source' => 'storage/app/public',
+                                    'issue_type' => 'UNMAPPED_LOCAL_FILE',
+                                    'status' => 'UPLOADED_AND_MAPPED',
+                                    'old_url' => null,
+                                    'new_url' => $res['secure_url'],
+                                    'notes' => 'Local file uploaded and mapping recorded',
+                                ];
+                            }
                         } catch (Throwable $e) {
                             $stats['failed']++;
-                            $this->error("    -> Upload thất bại: {$e->getMessage()}");
+                            $this->error("    -> Xử lý thất bại: {$e->getMessage()}");
                         }
                     }
                 } else {

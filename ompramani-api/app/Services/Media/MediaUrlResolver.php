@@ -101,9 +101,7 @@ class MediaUrlResolver
                 ->first();
 
             if ($mapping && filled($mapping->secure_url)) {
-                $cleanUrl = static::cleanDoubleExtension((string) $mapping->secure_url);
-
-                return static::$resolvedCache[$normalized] = $cleanUrl;
+                return static::$resolvedCache[$normalized] = (string) $mapping->secure_url;
             }
         } catch (\Throwable $e) {
             Log::warning('MediaUrlResolver: failed to query cloudinary_media_mappings table: ' . $e->getMessage(), [
