@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { forgotPassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 
@@ -44,14 +43,8 @@ export default function ForgotPasswordForm() {
 
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-fixed to-secondary-container p-2 shadow-xs mb-3">
-            <Image
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0yHXbepcasIOm7sdXStFD3jiTbEWkLEAuhYWHZoReJePvbIXopc820f28MkNX-wB7UZi4KzW1h5duIxv32pDxQIQCJs93zhGbWD2RuO41QWZZdoHgw9FUZ6G_5NLYvZHXMWde_BDeXdHmHhOmCpaNqKjG9fS9CESHLSlHBD4666w6Ib9scXz19o_ydlmVm8s5DqEMixxNsiVmq7vEIoiocrfJVJZOk9Jok8kDE6A"
-              alt="Om Mani"
-              width={40}
-              height={40}
-              className="w-full h-full object-contain"
-            />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-fixed to-secondary-container p-2 shadow-xs mb-3 text-primary">
+            <span className="material-symbols-outlined text-[28px]">lock_reset</span>
           </div>
           <h1 className="font-headline-md text-2xl font-bold text-primary tracking-tight">
             Quên Mật Khẩu

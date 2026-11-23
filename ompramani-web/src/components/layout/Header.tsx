@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { getSearchSuggestions } from "@/lib/api/search";
@@ -235,19 +234,9 @@ function HeaderContent() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md border-b border-outline-variant/40 shadow-[0_1px_8px_rgba(140,109,45,0.04)] transition-all">
       <div className="h-16 max-w-[1360px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
         {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-3 shrink-0 group">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-fixed to-secondary-container flex items-center justify-center p-1.5 shadow-xs group-hover:scale-105 transition-transform">
-            <Image
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0yHXbepcasIOm7sdXStFD3jiTbEWkLEAuhYWHZoReJePvbIXopc820f28MkNX-wB7UZi4KzW1h5duIxv32pDxQIQCJs93zhGbWD2RuO41QWZZdoHgw9FUZ6G_5NLYvZHXMWde_BDeXdHmHhOmCpaNqKjG9fS9CESHLSlHBD4666w6Ib9scXz19o_ydlmVm8s5DqEMixxNsiVmq7vEIoiocrfJVJZOk9Jok8kDE6A"
-              alt="Om Mani Logo"
-              width={36}
-              height={36}
-              className="w-full h-full object-contain"
-              priority
-            />
-          </div>
+        <Link href="/" className="flex items-center gap-2 shrink-0 group">
           <div className="flex flex-col">
-            <span className="font-headline-md text-[18px] font-semibold text-primary tracking-tight leading-none">
+            <span className="font-headline-md text-[18px] sm:text-[20px] font-bold text-primary tracking-tight leading-none group-hover:opacity-90 transition-opacity">
               Om Mani
             </span>
             <span className="font-label-md text-[10px] text-outline tracking-wider mt-0.5 uppercase">
@@ -870,19 +859,9 @@ export function Header() {
       fallback={
         <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md border-b border-outline-variant/40 shadow-[0_1px_8px_rgba(140,109,45,0.04)] h-16">
           <div className="h-16 max-w-[1360px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
-            <Link href="/" className="flex items-center gap-3 shrink-0">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-fixed to-secondary-container flex items-center justify-center p-1.5 shadow-xs">
-                <Image
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0yHXbepcasIOm7sdXStFD3jiTbEWkLEAuhYWHZoReJePvbIXopc820f28MkNX-wB7UZi4KzW1h5duIxv32pDxQIQCJs93zhGbWD2RuO41QWZZdoHgw9FUZ6G_5NLYvZHXMWde_BDeXdHmHhOmCpaNqKjG9fS9CESHLSlHBD4666w6Ib9scXz19o_ydlmVm8s5DqEMixxNsiVmq7vEIoiocrfJVJZOk9Jok8kDE6A"
-                  alt="Om Mani Logo"
-                  width={36}
-                  height={36}
-                  className="w-full h-full object-contain"
-                  priority
-                />
-              </div>
+            <Link href="/" className="flex items-center gap-2 shrink-0">
               <div className="flex flex-col">
-                <span className="font-headline-md text-[18px] font-semibold text-primary tracking-tight leading-none">
+                <span className="font-headline-md text-[18px] sm:text-[20px] font-bold text-primary tracking-tight leading-none">
                   Om Mani
                 </span>
                 <span className="font-label-md text-[10px] text-outline tracking-wider mt-0.5 uppercase">

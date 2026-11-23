@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Noto_Serif, Be_Vietnam_Pro } from "next/font/google";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { ScrollToTop } from "@/components/layout/ScrollToTop";
 import { SITE_CONFIG, getRobotsPolicy } from "@/lib/seo/config";
 import "./globals.css";
 
@@ -111,6 +112,7 @@ export default function RootLayout({
         <AuthProvider>
           <CartProvider>
             {children}
+            <ScrollToTop />
           </CartProvider>
         </AuthProvider>
       </body>
