@@ -99,6 +99,21 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        'neon' => [
+            'driver' => 'pgsql',
+            'url' => env('NEON_DATABASE_URL'),
+            'host' => env('NEON_DB_HOST', 'ep-icy-shape-az066m0x.c-3.ap-southeast-1.aws.neon.tech'),
+            'port' => env('NEON_DB_PORT', '5432'),
+            'database' => env('NEON_DB_DATABASE', 'ompramani'),
+            'username' => env('NEON_DB_USERNAME', 'ompramani_owner'),
+            'password' => env('NEON_DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => 'require',
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

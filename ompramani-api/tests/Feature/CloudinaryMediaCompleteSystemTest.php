@@ -496,4 +496,123 @@ class CloudinaryMediaCompleteSystemTest extends TestCase
             File::delete($csvPath);
         }
     }
+
+    /**
+     * 12. Test Sutra 7 with NO mapping is correctly flagged as MISSING_MAPPING (not clean).
+     */
+    public function test_reconcile_command_reports_sutra_7_as_missing_mapping_when_no_mapping_exists(): void
+    {
+        Sutra::factory()->create([
+            'id' => 7,
+            'title' => 'Kinh A Di Đà',
+            'thumbnail' => 'sutras/thumbnails/authentic_sutra_thumb.jpg',
+        ]);
+
+        $csvPath = storage_path('app/test_sutra7_missing.csv');
+        $this->artisan('cloudinary:reconcile-media', [
+            '--dry-run' => true,
+            '--output-csv' => $csvPath,
+        ])->assertExitCode(0);
+
+        $this->assertFileExists($csvPath);
+        $csvContent = File::get($csvPath);
+        $this->assertStringContainsString('sutras.id=7', $csvContent);
+        $this->assertStringContainsString('MANUAL_ATTENTION', $csvContent);
+
+        if (File::exists($csvPath)) {
+            File::delete($csvPath);
+        }
+    }
+
+    /**
+     * 13. Test missing media without local file or Cloudinary asset is marked MANUAL_ATTENTION.
+     */
+    public function test_reconcile_command_flags_unverified_missing_media_as_manual_attention(): void
+    {
+        Article::factory()->create([
+            'cover_image' => 'articles/covers/completely_missing_asset.jpg',
+        ]);
+
+        $csvPath = storage_path('app/test_manual_attention.csv');
+        $this->artisan('cloudinary:reconcile-media', [
+            '--dry-run' => true,
+            '--output-csv' => $csvPath,
+        ])->assertExitCode(0);
+
+        $this->assertFileExists($csvPath);
+        $csvContent = File::get($csvPath);
+        $this->assertStringContainsString('UNVERIFIED_SOURCE_MISSING', $csvContent);
+        $this->assertStringContainsString('MANUAL_ATTENTION', $csvContent);
+
+        if (File::exists($csvPath)) {
+            File::delete($csvPath);
+        }
+    }
+
+    /**
+     * 14. Test Sutra 7 restores mapping from existing Cloudinary asset without overwrite.
+     */
+    public function test_reconcile_command_restores_sutra7_from_existing_cloud_asset(): void
+    {
+        Sutra::factory()->create([
+            'id' => 7,
+            'title' => 'Kinh A Di Đà',
+            'thumbnail' => 'sutras/thumbnails/known_sutra_cloud.jpg',
+        ]);
+
+        $mockStorage = \Mockery::mock(MediaStorageService::class);
+        $mockStorage->shouldReceive('isConfigured')->andReturn(true);
+        $mockStorage->shouldReceive('getCloudinaryAsset')
+            ->with('sutras/thumbnails/known_sutra_cloud.jpg', 'image')
+            ->andReturn([
+                'public_id' => 'sutras/thumbnails/known_sutra_cloud',
+                'resource_type' => 'image',
+                'format' => 'jpg',
+                'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/sutras/thumbnails/known_sutra_cloud.jpg',
+                'bytes' => 45000,
+            ]);
+        $mockStorage->shouldReceive('getCloudinaryAsset')->andReturn(null);
+        $mockStorage->shouldReceive('uploadToCloudinary')->andReturn([
+            'local_path' => 'sample',
+            'public_id' => 'sample',
+            'resource_type' => 'image',
+            'format' => 'jpg',
+            'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/sample.jpg',
+            'checksum' => 'fake-sha',
+            'file_size' => 1024,
+            'status' => 'synced',
+        ]);
+
+        $this->app->instance(MediaStorageService::class, $mockStorage);
+
+        $csvPath = storage_path('app/test_sutra7_cloud_restore.csv');
+        $this->artisan('cloudinary:reconcile-media', [
+            '--fix' => true,
+            '--output-csv' => $csvPath,
+        ])->assertExitCode(0);
+
+        $mapping = CloudinaryMediaMapping::where('local_path', 'sutras/thumbnails/known_sutra_cloud.jpg')->first();
+        $this->assertNotNull($mapping);
+        $this->assertSame('https://res.cloudinary.com/dml5eptq2/image/upload/sutras/thumbnails/known_sutra_cloud.jpg', $mapping->secure_url);
+
+        if (File::exists($csvPath)) {
+            File::delete($csvPath);
+        }
+    }
+
+    /**
+     * 15. Test ReconcileMediaMappingsCommand supports target database connection parameter.
+     */
+    public function test_reconcile_command_supports_database_option(): void
+    {
+        $defaultConn = config('database.default');
+
+        $this->artisan('cloudinary:reconcile-media', [
+            '--dry-run' => true,
+            '--database' => $defaultConn,
+        ])->assertExitCode(0);
+
+        // Ensure default connection was properly restored
+        $this->assertSame($defaultConn, \Illuminate\Support\Facades\DB::getDefaultConnection());
+    }
 }

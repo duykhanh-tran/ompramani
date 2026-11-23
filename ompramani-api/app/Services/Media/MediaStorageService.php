@@ -251,6 +251,53 @@ class MediaStorageService
     }
 
     /**
+     * Retrieve asset details directly from Cloudinary Admin API.
+     * Returns null if asset does not exist or credentials are not configured.
+     *
+     * @return array{
+     *     public_id: string,
+     *     resource_type: string,
+     *     format: string,
+     *     secure_url: string,
+     *     bytes: ?int
+     * }|null
+     */
+    public function getCloudinaryAsset(string $publicId, ?string $resourceType = null): ?array
+    {
+        if (! $this->isConfigured()) {
+            return null;
+        }
+
+        $cleanPublicId = MediaUrlResolver::extractPublicId($publicId);
+        $type = $resourceType ?: MediaUrlResolver::getResourceType($publicId);
+
+        // Try exact public_id first, then cleanPublicId if different
+        $candidates = array_values(array_unique([$cleanPublicId, $publicId]));
+
+        foreach ($candidates as $id) {
+            try {
+                $response = $this->cloudinary->adminApi()->asset($id, [
+                    'resource_type' => $type,
+                ]);
+
+                $data = $response instanceof ApiResponse ? $response->getArrayCopy() : (array) $response;
+
+                return [
+                    'public_id' => (string) ($data['public_id'] ?? $id),
+                    'resource_type' => (string) ($data['resource_type'] ?? $type),
+                    'format' => (string) ($data['format'] ?? pathinfo($id, PATHINFO_EXTENSION)),
+                    'secure_url' => (string) ($data['secure_url'] ?? $data['url'] ?? ''),
+                    'bytes' => isset($data['bytes']) ? (int) $data['bytes'] : null,
+                ];
+            } catch (Throwable) {
+                // Try next candidate
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Check if a media asset exists in Cloudinary.
      */
     public function existsInCloudinary(string $logicalPath): bool
@@ -268,15 +315,7 @@ class MediaStorageService
         $publicId = $mapping?->public_id ?? MediaUrlResolver::extractPublicId($cleanPath);
         $resourceType = $mapping?->resource_type ?? MediaUrlResolver::getResourceType($cleanPath);
 
-        try {
-            $this->cloudinary->adminApi()->asset($publicId, [
-                'resource_type' => $resourceType,
-            ]);
-
-            return true;
-        } catch (Throwable) {
-            return false;
-        }
+        return $this->getCloudinaryAsset($publicId, $resourceType) !== null;
     }
 
     /**
