@@ -654,4 +654,401 @@ class SepayPaymentTest extends TestCase
         $totalPaidRevenue = (int) Order::where('payment_status', PaymentStatus::Paid->value)->sum('total_vnd');
         $this->assertSame(500000, $totalPaidRevenue);
     }
+
+    /**
+     * 15. Unconfigured SePay service detects missing credentials.
+     */
+    public function test_unconfigured_sepay_service_detects_missing_credentials(): void
+    {
+        Config::set('sepay.merchant_id', null);
+        Config::set('sepay.secret_key', null);
+        Config::set('services.sepay.merchant_id', null);
+        Config::set('services.sepay.secret_key', null);
+
+        $service = new SepayPaymentService();
+        $this->assertFalse($service->isConfigured());
+    }
+
+    /**
+     * 16. Placeholder credentials are fundamentally rejected as unconfigured.
+     */
+    public function test_placeholder_credentials_are_strictly_rejected(): void
+    {
+        $placeholders = [
+            ['your_sandbox_merchant_id', 'your_sandbox_merchant_secret_key'],
+            ['your_merchant_id', 'your_merchant_secret_key'],
+            ['YOUR_MERCHANT_ID', 'YOUR_MERCHANT_SECRET_KEY'],
+            ['placeholder', 'placeholder'],
+            ['changeme', 'changeme'],
+            ['', ''],
+            ['   ', '   '],
+        ];
+
+        $service = new SepayPaymentService();
+
+        foreach ($placeholders as [$mId, $sKey]) {
+            Config::set('sepay.merchant_id', $mId);
+            Config::set('sepay.secret_key', $sKey);
+            Config::set('services.sepay.merchant_id', $mId);
+            Config::set('services.sepay.secret_key', $sKey);
+
+            $this->assertFalse(
+                $service->isConfigured(),
+                "Expected merchant '{$mId}' and secret '{$sKey}' to be rejected as placeholder."
+            );
+        }
+    }
+
+    /**
+     * 17. Checkout preview marks SePay as unavailable when unconfigured.
+     */
+    public function test_checkout_preview_marks_sepay_unavailable_when_unconfigured(): void
+    {
+        Config::set('sepay.merchant_id', null);
+        Config::set('sepay.secret_key', null);
+        Config::set('services.sepay.merchant_id', null);
+        Config::set('services.sepay.secret_key', null);
+
+        $user = $this->createUser();
+        Sanctum::actingAs($user);
+
+        $cat = $this->createCategory();
+        $prod = $this->createProduct($cat);
+
+        $res = $this->postJson('/api/v1/shop/checkout/preview', [
+            'items' => [
+                ['product_id' => (string) $prod->id, 'quantity' => 1],
+            ],
+        ])->assertOk();
+
+        $methods = $res->json('data.available_payment_methods');
+        $sepayMethod = collect($methods)->firstWhere('code', 'sepay');
+
+        $this->assertNotNull($sepayMethod);
+        $this->assertFalse($sepayMethod['is_available']);
+
+        $codMethod = collect($methods)->firstWhere('code', 'cod');
+        $this->assertNotNull($codMethod);
+        $this->assertTrue($codMethod['is_available']);
+    }
+
+    /**
+     * 18. Order creation with unconfigured SePay fails with 422 WITHOUT creating order or deducting stock.
+     */
+    public function test_order_creation_with_unconfigured_sepay_fails_without_creating_order_or_deducting_stock(): void
+    {
+        Config::set('sepay.merchant_id', null);
+        Config::set('sepay.secret_key', null);
+        Config::set('services.sepay.merchant_id', null);
+        Config::set('services.sepay.secret_key', null);
+
+        $user = $this->createUser();
+        Sanctum::actingAs($user);
+
+        $cat = $this->createCategory();
+        $prod = $this->createProduct($cat, ['price_vnd' => 200000, 'stock_quantity' => 10]);
+
+        $initialOrderCount = Order::count();
+
+        $res = $this->postJson('/api/v1/shop/orders', [
+            'customer_name' => 'Nguyễn Tu Học',
+            'customer_phone' => '0987654321',
+            'customer_email' => 'tuhoc@example.com',
+            'shipping_address' => 'Hà Nội',
+            'shipping_province' => 'Hà Nội',
+            'payment_method' => 'sepay',
+            'items' => [
+                ['product_id' => (string) $prod->id, 'quantity' => 2],
+            ],
+        ]);
+
+        $res->assertStatus(422);
+
+        // Verify no order was created
+        $this->assertSame($initialOrderCount, Order::count());
+
+        // Verify stock was NOT decremented
+        $prod->refresh();
+        $this->assertSame(10, $prod->stock_quantity);
+    }
+
+    /**
+     * 19. COD order creation succeeds normally even when SePay is completely unconfigured.
+     */
+    public function test_cod_order_creation_succeeds_even_when_sepay_unconfigured(): void
+    {
+        Config::set('sepay.merchant_id', null);
+        Config::set('sepay.secret_key', null);
+        Config::set('services.sepay.merchant_id', null);
+        Config::set('services.sepay.secret_key', null);
+
+        $user = $this->createUser();
+        Sanctum::actingAs($user);
+
+        $cat = $this->createCategory();
+        $prod = $this->createProduct($cat, ['price_vnd' => 200000, 'stock_quantity' => 10]);
+
+        $res = $this->postJson('/api/v1/shop/orders', [
+            'customer_name' => 'Nguyễn Tu Học',
+            'customer_phone' => '0987654321',
+            'customer_email' => 'tuhoc@example.com',
+            'shipping_address' => 'Hà Nội',
+            'shipping_province' => 'Hà Nội',
+            'payment_method' => 'cod',
+            'items' => [
+                ['product_id' => (string) $prod->id, 'quantity' => 2],
+            ],
+        ]);
+
+        $res->assertStatus(201);
+        $this->assertNull($res->json('payment_data'));
+
+        $prod->refresh();
+        $this->assertSame(8, $prod->stock_quantity);
+    }
+
+    /**
+     * 20. IPN webhook accepts Authorization: Apikey header fallback.
+     */
+    public function test_ipn_accepts_authorization_apikey_header_fallback(): void
+    {
+        $user = $this->createUser();
+        $cat = $this->createCategory();
+        $prod = $this->createProduct($cat, ['price_vnd' => 300000]);
+
+        $order = Order::create([
+            'user_id' => $user->id,
+            'customer_name' => 'Phật tử Test',
+            'customer_phone' => '0912345678',
+            'shipping_address' => 'Hà Nội',
+            'shipping_province' => 'Hà Nội',
+            'subtotal_vnd' => 300000,
+            'shipping_fee_vnd' => 30000,
+            'total_vnd' => 330000,
+            'currency' => 'VND',
+            'order_status' => OrderStatus::Pending,
+            'payment_method' => PaymentMethod::Sepay,
+            'payment_status' => PaymentStatus::Unpaid,
+        ]);
+
+        $invoice = "{$order->order_number}-A1";
+        $order->payments()->create([
+            'attempt_number' => 1,
+            'payment_method' => PaymentMethod::Sepay,
+            'provider' => 'sepay',
+            'amount_vnd' => 330000,
+            'currency' => 'VND',
+            'status' => PaymentStatus::Pending,
+            'transaction_ref' => $invoice,
+        ]);
+
+        $payload = [
+            'notification_type' => 'ORDER_PAID',
+            'order' => [
+                'order_invoice_number' => $invoice,
+                'order_amount' => '330000',
+            ],
+            'transaction' => [
+                'transaction_amount' => '330000',
+                'transaction_currency' => 'VND',
+            ],
+        ];
+
+        // Use Authorization: Apikey header instead of X-Secret-Key
+        $this->postJson('/api/v1/shop/sepay/ipn', $payload, [
+            'Authorization' => "Apikey {$this->testIpnSecretKey}",
+        ])->assertOk();
+
+        $order->refresh();
+        $this->assertSame(PaymentStatus::Paid, $order->payment_status);
+    }
+
+    /**
+     * 21. IPN webhook rejects merchant ID mismatch.
+     */
+    public function test_ipn_rejects_merchant_id_mismatch(): void
+    {
+        $user = $this->createUser();
+        $order = Order::create([
+            'user_id' => $user->id,
+            'customer_name' => 'Phật tử Test',
+            'customer_phone' => '0912345678',
+            'shipping_address' => 'Hà Nội',
+            'shipping_province' => 'Hà Nội',
+            'subtotal_vnd' => 300000,
+            'shipping_fee_vnd' => 30000,
+            'total_vnd' => 330000,
+            'currency' => 'VND',
+            'order_status' => OrderStatus::Pending,
+            'payment_method' => PaymentMethod::Sepay,
+            'payment_status' => PaymentStatus::Unpaid,
+        ]);
+
+        $invoice = "{$order->order_number}-A1";
+        $order->payments()->create([
+            'attempt_number' => 1,
+            'payment_method' => PaymentMethod::Sepay,
+            'provider' => 'sepay',
+            'amount_vnd' => 330000,
+            'currency' => 'VND',
+            'status' => PaymentStatus::Pending,
+            'transaction_ref' => $invoice,
+        ]);
+
+        $payload = [
+            'notification_type' => 'ORDER_PAID',
+            'order' => [
+                'order_invoice_number' => $invoice,
+                'order_amount' => '330000',
+                'merchant_id' => 'DIFFERENT_MERCHANT_ID',
+            ],
+            'transaction' => [
+                'transaction_amount' => '330000',
+                'transaction_currency' => 'VND',
+            ],
+        ];
+
+        $this->postJson('/api/v1/shop/sepay/ipn', $payload, [
+            'X-Secret-Key' => $this->testIpnSecretKey,
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'Merchant ID mismatch.');
+    }
+
+    /**
+     * 22. IPN webhook rejects failed transaction status.
+     */
+    public function test_ipn_rejects_failed_transaction_status(): void
+    {
+        $user = $this->createUser();
+        $order = Order::create([
+            'user_id' => $user->id,
+            'customer_name' => 'Phật tử Test',
+            'customer_phone' => '0912345678',
+            'shipping_address' => 'Hà Nội',
+            'shipping_province' => 'Hà Nội',
+            'subtotal_vnd' => 300000,
+            'shipping_fee_vnd' => 30000,
+            'total_vnd' => 330000,
+            'currency' => 'VND',
+            'order_status' => OrderStatus::Pending,
+            'payment_method' => PaymentMethod::Sepay,
+            'payment_status' => PaymentStatus::Unpaid,
+        ]);
+
+        $invoice = "{$order->order_number}-A1";
+        $order->payments()->create([
+            'attempt_number' => 1,
+            'payment_method' => PaymentMethod::Sepay,
+            'provider' => 'sepay',
+            'amount_vnd' => 330000,
+            'currency' => 'VND',
+            'status' => PaymentStatus::Pending,
+            'transaction_ref' => $invoice,
+        ]);
+
+        $payload = [
+            'notification_type' => 'ORDER_PAID',
+            'order' => [
+                'order_invoice_number' => $invoice,
+                'order_amount' => '330000',
+            ],
+            'transaction' => [
+                'transaction_amount' => '330000',
+                'transaction_currency' => 'VND',
+                'transaction_status' => 'FAILED',
+            ],
+        ];
+
+        $this->postJson('/api/v1/shop/sepay/ipn', $payload, [
+            'X-Secret-Key' => $this->testIpnSecretKey,
+        ])->assertStatus(422);
+
+        $order->refresh();
+        $this->assertSame(PaymentStatus::Unpaid, $order->payment_status);
+    }
+
+    /**
+     * 23. SePay retry payment fails cleanly when SePay is unconfigured.
+     */
+    public function test_sepay_retry_fails_cleanly_when_unconfigured(): void
+    {
+        $user = $this->createUser();
+        Sanctum::actingAs($user);
+
+        $order = Order::create([
+            'user_id' => $user->id,
+            'customer_name' => 'Phật tử Test',
+            'customer_phone' => '0912345678',
+            'shipping_address' => 'Hà Nội',
+            'shipping_province' => 'Hà Nội',
+            'subtotal_vnd' => 300000,
+            'shipping_fee_vnd' => 30000,
+            'total_vnd' => 330000,
+            'currency' => 'VND',
+            'order_status' => OrderStatus::Pending,
+            'payment_method' => PaymentMethod::Sepay,
+            'payment_status' => PaymentStatus::Unpaid,
+        ]);
+
+        $order->payments()->create([
+            'attempt_number' => 1,
+            'payment_method' => PaymentMethod::Sepay,
+            'provider' => 'sepay',
+            'amount_vnd' => 330000,
+            'currency' => 'VND',
+            'status' => PaymentStatus::Pending,
+            'transaction_ref' => "{$order->order_number}-A1",
+        ]);
+
+        // Unset credentials
+        Config::set('sepay.merchant_id', null);
+        Config::set('sepay.secret_key', null);
+        Config::set('services.sepay.merchant_id', null);
+        Config::set('services.sepay.secret_key', null);
+
+        $res = $this->postJson("/api/v1/shop/orders/{$order->public_id}/sepay-retry");
+        $res->assertStatus(422);
+
+        // Ensure no second payment attempt was created
+        $this->assertSame(1, $order->payments()->count());
+    }
+
+    /**
+     * 24. Switch to COD works even when SePay was unconfigured or failed.
+     */
+    public function test_switch_to_cod_works_when_sepay_unconfigured(): void
+    {
+        $user = $this->createUser();
+        Sanctum::actingAs($user);
+
+        $order = Order::create([
+            'user_id' => $user->id,
+            'customer_name' => 'Phật tử Test',
+            'customer_phone' => '0912345678',
+            'shipping_address' => 'Hà Nội',
+            'shipping_province' => 'Hà Nội',
+            'subtotal_vnd' => 300000,
+            'shipping_fee_vnd' => 30000,
+            'total_vnd' => 330000,
+            'currency' => 'VND',
+            'order_status' => OrderStatus::Pending,
+            'payment_method' => PaymentMethod::Sepay,
+            'payment_status' => PaymentStatus::Unpaid,
+        ]);
+
+        $order->payments()->create([
+            'attempt_number' => 1,
+            'payment_method' => PaymentMethod::Sepay,
+            'provider' => 'sepay',
+            'amount_vnd' => 330000,
+            'currency' => 'VND',
+            'status' => PaymentStatus::Pending,
+            'transaction_ref' => "{$order->order_number}-A1",
+        ]);
+
+        $res = $this->postJson("/api/v1/shop/orders/{$order->public_id}/switch-to-cod")->assertOk();
+
+        $order->refresh();
+        $this->assertSame(PaymentMethod::Cod, $order->payment_method);
+    }
 }

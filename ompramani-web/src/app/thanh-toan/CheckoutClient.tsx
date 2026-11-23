@@ -144,6 +144,12 @@ export function CheckoutClient() {
         if (reqId === previewReqIdRef.current) {
           setPreviewData(data);
           setIsPreviewLoading(false);
+
+          // If SePay is not configured or unavailable, ensure payment method falls back to COD
+          const sepayOpt = data.available_payment_methods?.find((m) => m.code === "sepay");
+          if (sepayOpt && sepayOpt.is_available === false) {
+            setPaymentMethod("cod");
+          }
         }
       })
       .catch((err) => {
@@ -592,37 +598,59 @@ export function CheckoutClient() {
               </label>
 
               {/* SePay VietQR Option */}
-              <label
-                htmlFor="payment-sepay"
-                className={`flex items-start gap-3.5 p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                  paymentMethod === "sepay"
-                    ? "border-primary bg-primary/5"
-                    : "border-outline-variant/30 hover:border-outline-variant/60 bg-surface"
-                }`}
-              >
-                <input
-                  type="radio"
-                  id="payment-sepay"
-                  name="payment_method"
-                  value="sepay"
-                  checked={paymentMethod === "sepay"}
-                  onChange={() => setPaymentMethod("sepay")}
-                  className="mt-1 text-primary focus:ring-primary cursor-pointer"
-                />
-                <div className="space-y-1 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-sm text-on-surface">
-                      Chuyển khoản VietQR (Cổng SePay)
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 font-medium">
-                      Tự động 24/7
-                    </span>
-                  </div>
-                  <p className="text-xs text-on-surface-variant leading-relaxed">
-                    Quét mã QR chuyển khoản nhanh qua mọi ứng dụng ngân hàng và ví điện tử. Hệ thống tự động xác nhận giao dịch tức thì, bảo mật và chính xác 100%.
-                  </p>
-                </div>
-              </label>
+              {(() => {
+                const sepayOpt = previewData?.available_payment_methods?.find((m) => m.code === "sepay");
+                const isSepayActive = sepayOpt ? sepayOpt.is_available !== false : true;
+
+                return (
+                  <label
+                    htmlFor="payment-sepay"
+                    className={`flex items-start gap-3.5 p-4 rounded-2xl border-2 transition-all ${
+                      !isSepayActive
+                        ? "opacity-60 bg-surface-container/50 border-outline-variant/20 cursor-not-allowed"
+                        : paymentMethod === "sepay"
+                        ? "border-primary bg-primary/5 cursor-pointer"
+                        : "border-outline-variant/30 hover:border-outline-variant/60 bg-surface cursor-pointer"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      id="payment-sepay"
+                      name="payment_method"
+                      value="sepay"
+                      disabled={!isSepayActive}
+                      checked={paymentMethod === "sepay"}
+                      onChange={() => {
+                        if (isSepayActive) {
+                          setPaymentMethod("sepay");
+                        }
+                      }}
+                      className="mt-1 text-primary focus:ring-primary cursor-pointer disabled:cursor-not-allowed"
+                    />
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm text-on-surface">
+                          Chuyển khoản VietQR (Cổng SePay)
+                        </span>
+                        {isSepayActive ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 font-medium">
+                            Tự động 24/7
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 font-medium">
+                            Tạm chưa khả dụng
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-on-surface-variant leading-relaxed">
+                        {isSepayActive
+                          ? "Quét mã QR chuyển khoản nhanh qua mọi ứng dụng ngân hàng và ví điện tử. Hệ thống tự động xác nhận giao dịch tức thì, bảo mật và chính xác 100%."
+                          : (sepayOpt?.description || "Cổng thanh toán SePay đang trong quá trình bảo trì/cấu hình. Quý đạo hữu vui lòng chọn phương thức COD.")}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })()}
             </div>
           </div>
         </div>

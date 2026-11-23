@@ -149,6 +149,8 @@ class ShopOrderController extends Controller
         $shippingFeeVnd = ShippingFeePolicy::calculateFee($subtotalVnd);
         $totalVnd = $subtotalVnd + $shippingFeeVnd;
 
+        $isSepayConfigured = $this->sepayService->isConfigured();
+
         return response()->json([
             'data' => [
                 'items' => $previewItems,
@@ -165,11 +167,15 @@ class ShopOrderController extends Controller
                         'code' => PaymentMethod::Cod->value,
                         'name' => PaymentMethod::Cod->label(),
                         'description' => 'Quý đạo hữu nhận hàng và kiểm tra trước khi gửi tiền cho nhân viên giao hàng.',
+                        'is_available' => true,
                     ],
                     [
                         'code' => PaymentMethod::Sepay->value,
                         'name' => PaymentMethod::Sepay->label(),
-                        'description' => 'Quét mã VietQR chuyển khoản nhanh 24/7 qua cổng thanh toán bảo mật SePay.',
+                        'description' => $isSepayConfigured
+                            ? 'Quét mã VietQR chuyển khoản nhanh 24/7 qua cổng thanh toán bảo mật SePay.'
+                            : 'Cổng thanh toán trực tuyến SePay đang bảo trì hoặc chưa hoàn tất cấu hình. Quý đạo hữu vui lòng chọn phương thức Thanh toán khi nhận hàng (COD).',
+                        'is_available' => $isSepayConfigured,
                     ],
                 ],
             ],
@@ -233,8 +239,17 @@ class ShopOrderController extends Controller
 
         $chosenMethod = PaymentMethod::from($validated['payment_method']);
 
+        // Fail-safe pre-check: Never attempt SePay checkout if merchant gateway is not configured
+        if ($chosenMethod === PaymentMethod::Sepay && ! $this->sepayService->isConfigured()) {
+            throw ValidationException::withMessages([
+                'payment_method' => ['Cổng thanh toán trực tuyến SePay hiện chưa sẵn sàng do chưa hoàn tất cấu hình. Quý đạo hữu vui lòng chọn phương thức Thanh toán khi nhận hàng (COD).'],
+            ]);
+        }
+
+        $paymentData = null;
+
         /** @var Order $order */
-        $order = DB::transaction(function () use ($validated, $user, $idempotencyKey, $chosenMethod, $request) {
+        $order = DB::transaction(function () use ($validated, $user, $idempotencyKey, $chosenMethod, $request, &$paymentData) {
             $requestedItems = collect($validated['items']);
             $productIds = $requestedItems->pluck('product_id')->unique()->all();
 
@@ -351,7 +366,7 @@ class ShopOrderController extends Controller
             // Create initial payment attempt if SePay
             if ($chosenMethod === PaymentMethod::Sepay) {
                 $invoiceNumber = $this->sepayService->generateInvoiceNumber($newOrder, 1);
-                $newOrder->payments()->create([
+                $payment = $newOrder->payments()->create([
                     'attempt_number' => 1,
                     'payment_method' => PaymentMethod::Sepay,
                     'provider' => 'sepay',
@@ -361,6 +376,10 @@ class ShopOrderController extends Controller
                     'transaction_ref' => $invoiceNumber,
                     'ip_address' => $request->ip(),
                 ]);
+
+                // Generate checkout form fields INSIDE the atomic transaction.
+                // If this fails (e.g., SDK error, validation exception), the entire transaction rolls back cleanly.
+                $paymentData = $this->sepayService->generateCheckoutForm($newOrder, $payment);
             }
 
             // Record initial history event
@@ -377,13 +396,6 @@ class ShopOrderController extends Controller
 
             return $newOrder;
         });
-
-        $paymentData = null;
-        if ($order->payment_method === PaymentMethod::Sepay) {
-            /** @var OrderPayment $payment */
-            $payment = $order->payments()->where('attempt_number', 1)->firstOrFail();
-            $paymentData = $this->sepayService->generateCheckoutForm($order, $payment);
-        }
 
         $responseData = (new OrderDetailResource($order->load(['items', 'statusHistories', 'payments', 'latestPayment'])))->resolve();
 
