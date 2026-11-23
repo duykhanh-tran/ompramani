@@ -35,7 +35,8 @@ class AuthController extends Controller
             $request->session()->regenerate();
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $expiresAt = now()->addDays(7);
+        $token = $user->createToken('auth_token', ['*'], $expiresAt)->plainTextToken;
 
         return response()->json([
             'data' => [
@@ -59,7 +60,9 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $request->user();
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $remember = (bool) $request->boolean('remember');
+        $expiresAt = $remember ? now()->addDays(30) : now()->addDays(7);
+        $token = $user->createToken('auth_token', ['*'], $expiresAt)->plainTextToken;
 
         return response()->json([
             'data' => [

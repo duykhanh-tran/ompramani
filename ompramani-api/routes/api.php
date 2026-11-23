@@ -174,7 +174,9 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function (): void {
         Route::post('/register', [AuthController::class, 'register'])
             ->middleware('throttle:10,1')
             ->name('api.v1.auth.register');
-        Route::post('/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
+        Route::post('/login', [AuthController::class, 'login'])
+            ->middleware('throttle:10,1')
+            ->name('api.v1.auth.login');
         Route::post('/forgot-password', [PasswordResetController::class, 'forgotPassword'])
             ->middleware('throttle:6,1')
             ->name('api.v1.auth.forgot-password');

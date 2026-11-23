@@ -20,7 +20,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/*',
             'sanctum/csrf-cookie',
         ]);
-        $middleware->statefulApi();
         $middleware->append(SecurityHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
