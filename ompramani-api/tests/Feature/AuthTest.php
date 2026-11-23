@@ -480,4 +480,58 @@ class AuthTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('data.email_verified', true);
     }
+
+    /**
+     * 25. Complete token-based authentication flow for cross-origin SPAs.
+     */
+    public function test_25_token_based_authentication_flow(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'tokenuser@example.com',
+            'password' => Hash::make('SecretPass123'),
+        ]);
+
+        // Login returns plainTextToken
+        $loginRes = $this->postJson(route('api.v1.auth.login'), [
+            'email' => 'tokenuser@example.com',
+            'password' => 'SecretPass123',
+        ]);
+
+        $loginRes->assertStatus(200)
+            ->assertJsonStructure([
+                'data' => [
+                    'user' => ['id', 'email'],
+                    'token',
+                ],
+                'token',
+            ]);
+
+        $token = $loginRes->json('data.token');
+        $this->assertNotEmpty($token);
+
+        // Stateless request with Authorization header works on protected route
+        $meRes = $this->withHeader('Authorization', 'Bearer ' . $token)
+            ->getJson(route('api.v1.auth.me'));
+
+        $meRes->assertStatus(200)
+            ->assertJsonPath('data.email', 'tokenuser@example.com');
+
+        // Logout with Bearer token revokes the token
+        $logoutRes = $this->withHeader('Authorization', 'Bearer ' . $token)
+            ->postJson(route('api.v1.auth.logout'));
+
+        $logoutRes->assertStatus(200);
+
+        // Token is revoked from database
+        $this->assertDatabaseMissing('personal_access_tokens', [
+            'tokenable_id' => $user->id,
+        ]);
+
+        // Stateless request without session returns 401
+        $this->flushSession();
+        $afterLogoutRes = $this->withHeader('Authorization', 'Bearer ' . $token)
+            ->getJson(route('api.v1.auth.me'));
+
+        $afterLogoutRes->assertStatus(401);
+    }
 }

@@ -76,11 +76,13 @@ export interface ChangePasswordPayload {
 export interface AuthResponse {
   data?: {
     user?: AuthUser;
+    token?: string;
     email?: string;
     email_verified?: boolean;
     avatar?: string | null;
     avatar_url?: string | null;
   };
+  token?: string;
   user?: AuthUser;
   message?: string;
 }

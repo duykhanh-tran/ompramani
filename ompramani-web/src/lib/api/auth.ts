@@ -1,4 +1,4 @@
-import { apiClient, ApiError, getApiBaseUrl } from "./client";
+import { apiClient, ApiError, getApiBaseUrl, setAuthToken } from "./client";
 import {
   AuthResponse,
   AuthUser,
@@ -40,7 +40,14 @@ export async function register(payload: RegisterPayload): Promise<AuthUser> {
     cache: "no-store",
   });
 
-  const user = res.data?.user || res.user;
+  const token = res.data?.token || res.token;
+  if (token) {
+    setAuthToken(token);
+  }
+
+  const user =
+    res.user ||
+    (res.data && "user" in res.data ? res.data.user : (res.data as unknown as AuthUser));
   if (!user) {
     throw new ApiError(500, "Không thể lấy thông tin tài khoản sau khi đăng ký.");
   }
@@ -60,7 +67,14 @@ export async function login(payload: LoginPayload): Promise<AuthUser> {
     cache: "no-store",
   });
 
-  const user = res.data?.user || res.user;
+  const token = res.data?.token || res.token;
+  if (token) {
+    setAuthToken(token);
+  }
+
+  const user =
+    res.user ||
+    (res.data && "user" in res.data ? res.data.user : (res.data as unknown as AuthUser));
   if (!user) {
     throw new ApiError(500, "Không thể lấy thông tin tài khoản sau khi đăng nhập.");
   }
@@ -84,6 +98,8 @@ export async function logout(): Promise<{ message: string }> {
       return { message: "Đã đăng xuất." };
     }
     throw error;
+  } finally {
+    setAuthToken(null);
   }
 }
 
@@ -98,9 +114,15 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       cache: "no-store",
     });
 
-    return (res.data as unknown as AuthUser) || res.user || null;
+    const user =
+      res.user ||
+      (res.data && "user" in res.data ? res.data.user : (res.data as unknown as AuthUser)) ||
+      null;
+
+    return user;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
+      setAuthToken(null);
       return null;
     }
     // Network or other unexpected error
