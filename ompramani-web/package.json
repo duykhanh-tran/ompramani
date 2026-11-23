@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/utils/__tests__/*.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/utils/__tests__/*.test.ts src/lib/auth/__tests__/*.test.ts"
   },
   "dependencies": {
     "next": "^16.4.5",

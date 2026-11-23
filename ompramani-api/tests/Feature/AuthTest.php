@@ -534,4 +534,76 @@ class AuthTest extends TestCase
 
         $afterLogoutRes->assertStatus(401);
     }
+
+    /**
+     * 26. Cross-origin API login from Vercel domain succeeds statelessly without HTTP 419 CSRF mismatch.
+     */
+    public function test_26_stateless_api_login_succeeds_without_csrf_from_cross_origin(): void
+    {
+        User::factory()->create([
+            'email' => 'vercel_user@example.com',
+            'password' => Hash::make('VercelPass123'),
+        ]);
+
+        $response = $this->withHeaders([
+            'Origin' => 'https://ompramani.vercel.app',
+            'Referer' => 'https://ompramani.vercel.app/',
+        ])->postJson(route('api.v1.auth.login'), [
+            'email' => 'vercel_user@example.com',
+            'password' => 'VercelPass123',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.user.email', 'vercel_user@example.com')
+            ->assertJsonStructure(['data' => ['token']]);
+    }
+
+    /**
+     * 27. Token issuance has an explicit expiration policy.
+     */
+    public function test_27_token_issuance_has_expiration_policy(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'expiring_user@example.com',
+            'password' => Hash::make('Password123'),
+        ]);
+
+        // Regular login: expires in 7 days
+        $this->postJson(route('api.v1.auth.login'), [
+            'email' => 'expiring_user@example.com',
+            'password' => 'Password123',
+            'remember' => false,
+        ])->assertStatus(200);
+
+        $regularToken = $user->tokens()->latest('id')->first();
+        $this->assertNotNull($regularToken->expires_at);
+        $this->assertTrue($regularToken->expires_at->isFuture());
+        $this->assertTrue($regularToken->expires_at->lessThanOrEqualTo(now()->addDays(8)));
+
+        // Remember login: expires in 30 days
+        $this->postJson(route('api.v1.auth.login'), [
+            'email' => 'expiring_user@example.com',
+            'password' => 'Password123',
+            'remember' => true,
+        ])->assertStatus(200);
+
+        $rememberToken = $user->tokens()->latest('id')->first();
+        $this->assertNotNull($rememberToken->expires_at);
+        $this->assertTrue($rememberToken->expires_at->greaterThan(now()->addDays(25)));
+    }
+
+    /**
+     * 28. Filament admin panel strictly preserves CSRF protection on mutating web routes.
+     */
+    public function test_28_filament_admin_panel_preserves_csrf_protection(): void
+    {
+        $panel = Filament::getPanel('admin');
+        $middleware = $panel->getMiddleware();
+
+        $this->assertContains(\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class, $middleware);
+        $this->assertContains(\Illuminate\Session\Middleware\StartSession::class, $middleware);
+
+        // Access login page returns 200
+        $this->get('/admin/login')->assertStatus(200);
+    }
 }

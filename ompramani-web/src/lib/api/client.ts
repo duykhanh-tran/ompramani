@@ -1,26 +1,17 @@
+import { getAuthTokenFromCookies, getBackendApiUrl } from "@/lib/auth/bff";
+
 export function getApiBaseUrl(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
   if (typeof window !== "undefined") {
-    const currentHost = window.location.hostname;
-    // Align host: if browser is on localhost:3000 -> use localhost:8000; if on 127.0.0.1:3000 -> use 127.0.0.1:8000
-    // This guarantees that cookies are shared between frontend and backend on the same hostname.
-    if (currentHost === "localhost" || currentHost === "127.0.0.1") {
-      try {
-        const url = new URL(envUrl);
-        url.hostname = currentHost;
-        return url.origin;
-      } catch {
-        // fallback
-      }
-    }
+    return window.location.origin;
   }
-
-  return envUrl;
+  return getBackendApiUrl();
 }
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  (process.env.NODE_ENV === "production"
+    ? "https://ompramani.onrender.com"
+    : "http://localhost:8000");
 
 export class ApiError extends Error {
   constructor(
@@ -40,23 +31,33 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Kept for backwards compatibility; returns null under Next.js BFF architecture
+ * where CSRF is verified server-side via Origin/Referer headers.
+ */
 export function getXsrfToken(): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  return null;
 }
 
+/**
+ * Deprecated: auth token is stored in HttpOnly cookie on Next.js domain.
+ * Kept for interface compatibility, returns null to avoid localStorage token leaks.
+ */
 export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("auth_token");
+  return null;
 }
 
-export function setAuthToken(token: string | null): void {
+/**
+ * Deprecated: token management is handled automatically by Next.js BFF HttpOnly cookies.
+ * Cleans up any legacy token stored in browser localStorage.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function setAuthToken(_token?: string | null): void {
   if (typeof window === "undefined") return;
-  if (token) {
-    localStorage.setItem("auth_token", token);
-  } else {
+  try {
     localStorage.removeItem("auth_token");
+  } catch {
+    // Ignore storage quota / security exceptions
   }
 }
 
@@ -64,8 +65,33 @@ export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const baseUrl = getApiBaseUrl();
-  const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+  const isBrowser = typeof window !== "undefined";
+  let targetUrl: string;
+
+  if (isBrowser) {
+    const origin = window.location.origin;
+    const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+
+    if (cleanEndpoint.startsWith("/api/v1/")) {
+      targetUrl = `${origin}/api/proxy${cleanEndpoint}`;
+    } else if (cleanEndpoint.startsWith("/api/")) {
+      targetUrl = `${origin}${cleanEndpoint}`;
+    } else {
+      targetUrl = `${origin}/api/proxy/${cleanEndpoint.replace(/^\/+/, "")}`;
+    }
+  } else {
+    // Server-side (SSR / RSC)
+    const backendBase = getBackendApiUrl();
+    let cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+
+    if (cleanEndpoint.startsWith("/api/proxy/")) {
+      cleanEndpoint = cleanEndpoint.replace("/api/proxy", "");
+    } else if (cleanEndpoint.startsWith("/api/auth/")) {
+      cleanEndpoint = cleanEndpoint.replace("/api/auth/", "/api/v1/auth/");
+    }
+
+    targetUrl = `${backendBase}${cleanEndpoint}`;
+  }
 
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -76,15 +102,16 @@ export async function apiClient<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  // Cross-domain SPA authorization: attach Bearer token if stored in browser
-  const authToken = getAuthToken();
-  if (authToken && !headers["Authorization"]) {
-    headers["Authorization"] = `Bearer ${authToken}`;
-  }
-
-  const xsrfToken = getXsrfToken();
-  if (xsrfToken && options.method && options.method.toUpperCase() !== "GET") {
-    headers["X-XSRF-TOKEN"] = xsrfToken;
+  // On the server, forward auth token from cookies if available
+  if (!isBrowser && !headers["Authorization"]) {
+    try {
+      const serverToken = await getAuthTokenFromCookies();
+      if (serverToken) {
+        headers["Authorization"] = `Bearer ${serverToken}`;
+      }
+    } catch {
+      // Cookies not accessible outside request context
+    }
   }
 
   const fetchOptions: RequestInit = {
@@ -122,13 +149,9 @@ export async function apiClient<T>(
   }
 
   try {
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(targetUrl, fetchOptions);
 
     if (!response.ok) {
-      if (response.status === 401 && endpoint.includes("/auth/me")) {
-        setAuthToken(null);
-      }
-
       let errorData;
       try {
         errorData = await response.json();

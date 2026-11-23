@@ -1,4 +1,4 @@
-import { apiClient, ApiError, getApiBaseUrl, setAuthToken } from "./client";
+import { apiClient, ApiError, setAuthToken } from "./client";
 import {
   AuthResponse,
   AuthUser,
@@ -9,41 +9,27 @@ import {
 } from "@/types/auth";
 
 /**
- * Request CSRF cookie initialization from Laravel Sanctum.
+ * Kept for backwards compatibility.
+ * In the Next.js BFF architecture, cross-origin CSRF cookie fetching is obsolete
+ * as authentication is handled statelessly via HttpOnly cookies and server-side BFF proxying.
  */
 export async function getCsrfCookie(): Promise<void> {
-  if (typeof window === "undefined") return;
-
-  try {
-    const baseUrl = getApiBaseUrl();
-    await fetch(`${baseUrl}/sanctum/csrf-cookie`, {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        Accept: "application/json",
-      },
-    });
-  } catch (err) {
-    console.warn("Could not retrieve Sanctum CSRF cookie:", err);
-  }
+  // No-op in BFF architecture
+  return;
 }
 
 /**
- * Register a new user account.
+ * Register a new user account through Next.js BFF.
+ * The session token is stored in an HttpOnly cookie and never exposed to JavaScript.
  */
 export async function register(payload: RegisterPayload): Promise<AuthUser> {
-  await getCsrfCookie();
-
-  const res = await apiClient<AuthResponse>("/api/v1/auth/register", {
+  const res = await apiClient<AuthResponse>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
     cache: "no-store",
   });
 
-  const token = res.data?.token || res.token;
-  if (token) {
-    setAuthToken(token);
-  }
+  setAuthToken(null); // Clean up any legacy localStorage entry
 
   const user =
     res.user ||
@@ -56,21 +42,17 @@ export async function register(payload: RegisterPayload): Promise<AuthUser> {
 }
 
 /**
- * Authenticate user with credentials.
+ * Authenticate user with credentials through Next.js BFF.
+ * Token is stored securely in an HttpOnly cookie.
  */
 export async function login(payload: LoginPayload): Promise<AuthUser> {
-  await getCsrfCookie();
-
-  const res = await apiClient<AuthResponse>("/api/v1/auth/login", {
+  const res = await apiClient<AuthResponse>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify(payload),
     cache: "no-store",
   });
 
-  const token = res.data?.token || res.token;
-  if (token) {
-    setAuthToken(token);
-  }
+  setAuthToken(null); // Clean up any legacy localStorage entry
 
   const user =
     res.user ||
@@ -83,17 +65,15 @@ export async function login(payload: LoginPayload): Promise<AuthUser> {
 }
 
 /**
- * Log out current user and clear server session.
+ * Log out current user and clear HttpOnly cookie session.
  */
 export async function logout(): Promise<{ message: string }> {
   try {
-    await getCsrfCookie();
-    return await apiClient<{ message: string }>("/api/v1/auth/logout", {
+    return await apiClient<{ message: string }>("/api/auth/logout", {
       method: "POST",
       cache: "no-store",
     });
   } catch (error) {
-    // Even if server returns error or is already logged out, consider client logged out
     if (error instanceof ApiError && error.status === 401) {
       return { message: "Đã đăng xuất." };
     }
@@ -104,12 +84,12 @@ export async function logout(): Promise<{ message: string }> {
 }
 
 /**
- * Retrieve current authenticated user session.
+ * Retrieve current authenticated user session from Next.js BFF.
  * Returns null if unauthenticated (401).
  */
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
-    const res = await apiClient<AuthResponse>("/api/v1/auth/me", {
+    const res = await apiClient<AuthResponse>("/api/auth/me", {
       method: "GET",
       cache: "no-store",
     });
@@ -125,20 +105,17 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       setAuthToken(null);
       return null;
     }
-    // Network or other unexpected error
     return null;
   }
 }
 
 /**
- * Request password reset instructions.
+ * Request password reset instructions through Next.js BFF.
  */
 export async function forgotPassword(
   payload: ForgotPasswordPayload
 ): Promise<{ message: string }> {
-  await getCsrfCookie();
-
-  return await apiClient<{ message: string }>("/api/v1/auth/forgot-password", {
+  return await apiClient<{ message: string }>("/api/auth/forgot-password", {
     method: "POST",
     body: JSON.stringify(payload),
     cache: "no-store",
@@ -146,14 +123,12 @@ export async function forgotPassword(
 }
 
 /**
- * Reset password using secret token.
+ * Reset password using secret token through Next.js BFF.
  */
 export async function resetPassword(
   payload: ResetPasswordPayload
 ): Promise<{ message: string }> {
-  await getCsrfCookie();
-
-  return await apiClient<{ message: string }>("/api/v1/auth/reset-password", {
+  return await apiClient<{ message: string }>("/api/auth/reset-password", {
     method: "POST",
     body: JSON.stringify(payload),
     cache: "no-store",
@@ -161,19 +136,17 @@ export async function resetPassword(
 }
 
 /**
- * Resend email verification notification.
+ * Resend email verification notification through Next.js BFF.
  */
 export async function resendVerificationEmail(): Promise<{ message: string }> {
-  await getCsrfCookie();
-
-  return await apiClient<{ message: string }>("/api/v1/auth/email/resend", {
+  return await apiClient<{ message: string }>("/api/auth/email/resend", {
     method: "POST",
     cache: "no-store",
   });
 }
 
 /**
- * Get email verification status.
+ * Get email verification status through Next.js BFF.
  */
 export async function getEmailVerificationStatus(): Promise<{
   email: string;
@@ -181,7 +154,7 @@ export async function getEmailVerificationStatus(): Promise<{
 }> {
   const res = await apiClient<{
     data: { email: string; email_verified: boolean };
-  }>("/api/v1/auth/email/status", {
+  }>("/api/auth/email/status", {
     method: "GET",
     cache: "no-store",
   });
