@@ -17,6 +17,21 @@ const nextConfig: NextConfig = {
         pathname: "/**",
       },
       {
+        protocol: "https",
+        hostname: "i.ytimg.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "img.youtube.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+        pathname: "/**",
+      },
+      {
         protocol: "http",
         hostname: "127.0.0.1",
         pathname: "/**",
@@ -77,6 +92,26 @@ const nextConfig: NextConfig = {
         source: "/practice",
         destination: "/#phuong-tien",
         permanent: false,
+      },
+      {
+        source: "/prayers/submit",
+        destination: "/cau-nguyen/gui-loi-nguyen",
+        permanent: true,
+      },
+      {
+        source: "/support/print",
+        destination: "/cua-hang",
+        permanent: true,
+      },
+      {
+        source: "/courses",
+        destination: "/video-phat-phap",
+        permanent: true,
+      },
+      {
+        source: "/charity",
+        destination: "/tim-chua",
+        permanent: true,
       },
     ];
   },

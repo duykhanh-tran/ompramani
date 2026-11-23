@@ -134,10 +134,10 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/courses"
+                  href="/video-phat-phap"
                   className="hover:text-primary transition-colors"
                 >
-                  Khóa Tu Học Cuối Tuần
+                  Khóa Tu Học &amp; Bài Giảng
                 </Link>
               </li>
             </ul>
@@ -151,7 +151,7 @@ export function Footer() {
             <ul className="space-y-2 font-body-sm text-body-sm">
               <li>
                 <Link
-                  href="/support/print"
+                  href="/cua-hang"
                   className="hover:text-primary transition-colors"
                 >
                   Đóng Góp Ấn Tống Kinh Điển
@@ -159,7 +159,7 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/prayers/submit"
+                  href="/cau-nguyen/gui-loi-nguyen"
                   className="hover:text-primary transition-colors"
                 >
                   Gửi Ý Niệm Cầu An Cầu Siêu
@@ -170,15 +170,7 @@ export function Footer() {
                   href="/tim-chua"
                   className="hover:text-primary transition-colors"
                 >
-                  Chùa Việt Nam
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/charity"
-                  className="hover:text-primary transition-colors"
-                >
-                  Cúng Dường &amp; Thiện Nguyện
+                  Chùa Việt Nam &amp; Thiện Nguyện
                 </Link>
               </li>
               <li>
