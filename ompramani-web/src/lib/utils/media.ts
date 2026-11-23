@@ -11,31 +11,34 @@ export function resolveMediaUrl(path: string | null | undefined): string | null 
     return null;
   }
 
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return trimmed;
+  // Sanitize duplicate extension if present (e.g. .jpg.jpg -> .jpg)
+  const sanitized = trimmed.replace(/(\.[a-zA-Z0-9]{3,4})\1$/i, "$1");
+
+  if (sanitized.startsWith("http://") || sanitized.startsWith("https://")) {
+    return sanitized;
   }
 
-  if (trimmed.startsWith("//")) {
-    return `https:${trimmed}`;
+  if (sanitized.startsWith("//")) {
+    return `https:${sanitized}`;
   }
 
-  if (trimmed.startsWith("data:")) {
-    return trimmed;
+  if (sanitized.startsWith("data:")) {
+    return sanitized;
   }
 
-  if (trimmed.startsWith("/storage/")) {
-    return `${API_BASE_URL}${trimmed}`;
+  if (sanitized.startsWith("/storage/")) {
+    return `${API_BASE_URL}${sanitized}`;
   }
 
-  if (trimmed.startsWith("storage/")) {
-    return `${API_BASE_URL}/${trimmed}`;
+  if (sanitized.startsWith("storage/")) {
+    return `${API_BASE_URL}/${sanitized}`;
   }
 
   // Root-relative path in Next.js public directory (e.g. "/images/...")
-  if (trimmed.startsWith("/")) {
-    return trimmed;
+  if (sanitized.startsWith("/")) {
+    return sanitized;
   }
 
   // If path is a relative storage key like "temple_media/abc.jpg" or "thumbnails/abc.jpg"
-  return `${API_BASE_URL}/storage/${trimmed.replace(/^\/+/, "")}`;
+  return `${API_BASE_URL}/storage/${sanitized.replace(/^\/+/, "")}`;
 }

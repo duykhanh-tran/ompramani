@@ -101,6 +101,8 @@ class ProductForm
                     ->image()
                     ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('products')
+                    ->visibility('public')
+                    ->fetchFileInformation(false)
                     ->maxSize(5120)
                     ->helperText('Định dạng hình ảnh JPG, PNG, WEBP (tối đa 5MB).'),
 

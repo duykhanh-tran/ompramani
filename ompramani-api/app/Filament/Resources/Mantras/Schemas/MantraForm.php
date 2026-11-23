@@ -79,6 +79,8 @@ class MantraForm
                     ->label('Audio trì niệm')
                     ->disk((string) config('filesystems.public_disk', 'public'))
                     ->directory('mantras/audio')
+                    ->visibility('public')
+                    ->fetchFileInformation(false)
                     ->maxSize(30720)
                     ->acceptedFileTypes([
                         'audio/mpeg',

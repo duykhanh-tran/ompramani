@@ -6,6 +6,7 @@ namespace App\Http\Resources\Api\V1;
 
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\Media\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -24,15 +25,9 @@ class OrderSummaryResource extends JsonResource
         /** @var OrderItem|null $firstItem */
         $firstItem = $this->relationLoaded('items') ? $this->items->first() : null;
 
-        $firstItemImage = null;
-        if (! empty($firstItem?->product_image_snapshot)) {
-            if (Str::startsWith($firstItem->product_image_snapshot, ['http://', 'https://', '/'])) {
-                $firstItemImage = $firstItem->product_image_snapshot;
-            } else {
-                $publicDisk = (string) config('filesystems.public_disk', 'public');
-                $firstItemImage = Storage::disk($publicDisk)->url($firstItem->product_image_snapshot);
-            }
-        }
+        $firstItemImage = filled($firstItem?->product_image_snapshot)
+            ? MediaUrlResolver::resolve($firstItem->product_image_snapshot)
+            : null;
 
         return [
             'public_id' => $this->public_id,

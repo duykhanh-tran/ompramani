@@ -47,6 +47,14 @@ class MediaUrlResolver
     ];
 
     /**
+     * Clean any duplicate file extension suffix (e.g. .jpg.jpg -> .jpg, .png.png -> .png, .mp3.mp3 -> .mp3).
+     */
+    public static function cleanDoubleExtension(string $urlOrPath): string
+    {
+        return (string) preg_replace('/(\.[a-zA-Z0-9]{3,4})\1$/i', '$1', $urlOrPath);
+    }
+
+    /**
      * Resolve any media path or URL to a clean, absolute HTTPS URL.
      */
     public static function resolve(?string $path, ?string $fallback = null): ?string
@@ -57,17 +65,20 @@ class MediaUrlResolver
 
         $path = trim((string) $path);
 
-        // 1. Return already fully-qualified or data URLs immediately
-        if (Str::startsWith($path, ['http://', 'https://', 'data:'])) {
-            return $path;
+        // 1. Sanitize any duplicate extension (.jpg.jpg -> .jpg)
+        $cleanPath = static::cleanDoubleExtension($path);
+
+        // 2. Return already fully-qualified or data URLs immediately
+        if (Str::startsWith($cleanPath, ['http://', 'https://', 'data:'])) {
+            return $cleanPath;
         }
 
-        if (Str::startsWith($path, '//')) {
-            return 'https:' . $path;
+        if (Str::startsWith($cleanPath, '//')) {
+            return 'https:' . $cleanPath;
         }
 
-        // 2. Normalize path: strip leading slashes and common prefixes like 'storage/' or 'public/'
-        $normalized = ltrim($path, '/');
+        // 3. Normalize path: strip leading slashes and common prefixes like 'storage/' or 'public/'
+        $normalized = ltrim($cleanPath, '/');
         if (Str::startsWith($normalized, 'storage/')) {
             $normalized = substr($normalized, 8);
         } elseif (Str::startsWith($normalized, 'public/')) {
@@ -78,15 +89,21 @@ class MediaUrlResolver
             return static::$resolvedCache[$normalized];
         }
 
-        // 3. Priority: Check database mapping table for confirmed synced Cloudinary media
+        // 4. Priority: Check database mapping table for confirmed synced Cloudinary media
         try {
             $mapping = CloudinaryMediaMapping::query()
-                ->where('local_path', $normalized)
+                ->where(function ($query) use ($normalized) {
+                    $query->where('local_path', $normalized)
+                        ->orWhere('local_path', 'storage/' . $normalized)
+                        ->orWhere('local_path', 'public/' . $normalized);
+                })
                 ->where('status', 'synced')
                 ->first();
 
             if ($mapping && filled($mapping->secure_url)) {
-                return static::$resolvedCache[$normalized] = (string) $mapping->secure_url;
+                $cleanUrl = static::cleanDoubleExtension((string) $mapping->secure_url);
+
+                return static::$resolvedCache[$normalized] = $cleanUrl;
             }
         } catch (\Throwable $e) {
             Log::warning('MediaUrlResolver: failed to query cloudinary_media_mappings table: ' . $e->getMessage(), [
@@ -94,7 +111,7 @@ class MediaUrlResolver
             ]);
         }
 
-        // 4. If public disk is configured to an external cloud disk (like r2_public or s3), resolve via that disk
+        // 5. If public disk is configured to an external cloud disk (like r2_public or s3), resolve via that disk
         $publicDisk = (string) config('filesystems.public_disk', 'public');
         if ($publicDisk !== 'public' && $publicDisk !== 'cloudinary') {
             try {
@@ -106,9 +123,15 @@ class MediaUrlResolver
             }
         }
 
-        // 5. Fallback: If not yet synced to Cloudinary, do NOT fabricate an unverified Cloudinary URL.
+        // 6. If local file exists in storage/app/public, return its public storage URL as safe fallback
+        $localFile = storage_path('app/public/' . $normalized);
+        if (file_exists($localFile) && is_file($localFile)) {
+            return static::$resolvedCache[$normalized] = Storage::disk('public')->url($normalized);
+        }
+
+        // 7. Fallback: If not yet synced to Cloudinary, do NOT fabricate an unverified Cloudinary URL.
         // Return the legacy path directly so existing API contracts and frontend resolver remain 100% backwards compatible.
-        return static::$resolvedCache[$normalized] = $path;
+        return static::$resolvedCache[$normalized] = $cleanPath;
     }
 
     /**
@@ -133,7 +156,7 @@ class MediaUrlResolver
         }
 
         $resourceType = static::getResourceType($path);
-        $cleanPath = ltrim($path, '/');
+        $cleanPath = ltrim(static::cleanDoubleExtension($path), '/');
 
         return sprintf(
             'https://res.cloudinary.com/%s/%s/upload/%s',
