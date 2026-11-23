@@ -13,6 +13,7 @@ use CodebarAg\FlysystemCloudinary\CloudinaryResponseLogger;
 use CodebarAg\FlysystemCloudinary\CloudinaryResponseMapper;
 use CodebarAg\FlysystemCloudinary\CloudinaryStringUploadSource;
 use CodebarAg\FlysystemCloudinary\FlysystemCloudinaryAdapter;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use League\Flysystem\Config;
 use League\Flysystem\UnableToDeleteFile;
@@ -39,9 +40,9 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
     }
 
     /**
-     * Upload an object to Cloudinary with automatic public_id sanitization
-     * (preventing double extension .jpg.jpg), audio resource_type detection,
-     * and automatic database mapping persistence.
+     * Upload an object to Cloudinary with automatic public_id sanitization,
+     * audio resource_type detection, overwrite protection by default,
+     * resilient mapping persistence with retry, and persistent fallback queue.
      *
      * @param string $path
      * @param string|resource $body
@@ -67,20 +68,42 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
         $cleanPublicId = MediaUrlResolver::extractPublicId($logicalPath);
         $extension = strtolower((string) pathinfo($logicalPath, PATHINFO_EXTENSION));
 
+        // Overwrite protection: overwrite is FALSE by default to protect existing assets
+        $flyOptions = $config->get('options');
+        $allowOverwrite = false;
+        if (is_array($flyOptions) && isset($flyOptions['overwrite'])) {
+            $allowOverwrite = (bool) $flyOptions['overwrite'];
+        } elseif ($config->get('overwrite') !== null) {
+            $allowOverwrite = (bool) $config->get('overwrite');
+        }
+
+        // Check if an asset already exists in mapping table when overwrite is disabled
+        if (! $allowOverwrite) {
+            $existingMapping = CloudinaryMediaMapping::query()
+                ->where('local_path', $logicalPath)
+                ->where('status', 'synced')
+                ->first();
+
+            if ($existingMapping) {
+                Log::warning("CloudinaryStorageAdapter: duplicate upload prevented for [{$logicalPath}] (asset already exists and overwrite is disabled).");
+                throw UnableToWriteFile::atLocation($path, "Asset already exists on Cloudinary for [{$logicalPath}] and overwrite is disabled.");
+            }
+        }
+
         // Use clean public_id WITHOUT extension so Cloudinary does not append format twice (.jpg.jpg)
         $uploadOptions = [
             'public_id' => $cleanPublicId,
             'resource_type' => $resourceType,
-            'overwrite' => true,
+            'overwrite' => $allowOverwrite,
             'invalidate' => true,
             'use_filename' => false,
             'unique_filename' => false,
         ];
 
-        // Merge any extra flysystem config options
-        $flyOptions = $config->get('options');
+        // Merge any extra flysystem config options while respecting explicit overwrite flag
         if (is_array($flyOptions) && $flyOptions !== []) {
             $uploadOptions = array_merge($uploadOptions, $flyOptions);
+            $uploadOptions['overwrite'] = $allowOverwrite;
         }
 
         try {
@@ -92,9 +115,10 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
                 'logicalPath' => $logicalPath,
                 'publicId' => $cleanPublicId,
                 'resourceType' => $resourceType,
+                'overwrite' => $allowOverwrite,
             ]);
 
-            return false;
+            throw UnableToWriteFile::atLocation($path, $e->getMessage(), $e);
         } finally {
             if ($temporaryFileHandle !== null) {
                 fclose($temporaryFileHandle);
@@ -103,12 +127,16 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
 
         $responseData = $response instanceof ApiResponse ? $response->getArrayCopy() : (array) $response;
         $returnedPublicId = (string) ($responseData['public_id'] ?? $cleanPublicId);
-        $secureUrl = (string) ($responseData['secure_url'] ?? MediaUrlResolver::buildCloudinaryUrl($logicalPath));
+
+        // Preserve authentic delivery URL returned by Cloudinary without stripping double extension
+        if (isset($responseData['secure_url']) && filled($responseData['secure_url'])) {
+            $secureUrl = (string) $responseData['secure_url'];
+        } else {
+            $secureUrl = (string) MediaUrlResolver::buildCloudinaryUrl($logicalPath);
+        }
+
         $returnedFormat = (string) ($responseData['format'] ?? $extension);
         $bytes = isset($responseData['bytes']) ? (int) $responseData['bytes'] : null;
-
-        // Clean any double extensions from secure_url (e.g. .jpg.jpg -> .jpg)
-        $secureUrl = MediaUrlResolver::cleanDoubleExtension($secureUrl);
 
         // Calculate file checksum if accessible
         $checksum = null;
@@ -118,29 +146,86 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
             $checksum = hash('sha256', $body);
         }
 
-        // Automatically update or create database mapping in Neon
-        try {
-            CloudinaryMediaMapping::updateOrCreate(
-                ['local_path' => $logicalPath],
-                [
-                    'public_id' => $returnedPublicId,
-                    'resource_type' => $resourceType,
-                    'format' => $returnedFormat,
-                    'secure_url' => $secureUrl,
-                    'checksum' => $checksum,
-                    'file_size' => $bytes,
-                    'status' => 'synced',
-                    'error_message' => null,
-                ]
+        // Automatically persist database mapping with retry mechanism
+        $maxRetries = 3;
+        $mappingSaved = false;
+        $mappingException = null;
+
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                CloudinaryMediaMapping::updateOrCreate(
+                    ['local_path' => $logicalPath],
+                    [
+                        'public_id' => $returnedPublicId,
+                        'resource_type' => $resourceType,
+                        'format' => $returnedFormat,
+                        'secure_url' => $secureUrl,
+                        'checksum' => $checksum,
+                        'file_size' => $bytes,
+                        'status' => 'synced',
+                        'error_message' => null,
+                    ]
+                );
+                MediaUrlResolver::clearCache();
+                $mappingSaved = true;
+                break;
+            } catch (Throwable $e) {
+                $mappingException = $e;
+                Log::warning("CloudinaryStorageAdapter: mapping save attempt {$attempt}/{$maxRetries} failed for [{$logicalPath}]: " . $e->getMessage());
+                if ($attempt < $maxRetries) {
+                    usleep(50000 * $attempt); // 50ms, 100ms
+                }
+            }
+        }
+
+        if (! $mappingSaved) {
+            // Write recovery entry to persistent fallback queue so reconciliation can restore it
+            $this->recordFailedMappingFallback([
+                'local_path' => $logicalPath,
+                'public_id' => $returnedPublicId,
+                'resource_type' => $resourceType,
+                'format' => $returnedFormat,
+                'secure_url' => $secureUrl,
+                'checksum' => $checksum,
+                'file_size' => $bytes,
+                'failed_at' => now()->toIso8601String(),
+                'error' => $mappingException?->getMessage(),
+            ]);
+
+            Log::critical("CloudinaryStorageAdapter: CRITICAL failure saving media mapping for [{$logicalPath}] after successful Cloudinary upload. Asset public_id=[{$returnedPublicId}], url=[{$secureUrl}]. Error: " . $mappingException?->getMessage());
+
+            // DO NOT SILENTLY REPORT SUCCESS! Throw UnableToWriteFile so Livewire/Filament shows error
+            throw UnableToWriteFile::atLocation(
+                $path,
+                "Cloudinary upload succeeded, but database mapping persistence failed after {$maxRetries} attempts: " . $mappingException?->getMessage(),
+                $mappingException
             );
-            MediaUrlResolver::clearCache();
-        } catch (Throwable $e) {
-            Log::warning("CloudinaryStorageAdapter: failed to record mapping for [{$logicalPath}]: " . $e->getMessage());
         }
 
         $this->responseLogger->log($response);
 
         return $this->responseMapper->normalizeUploadOrExplicit($response, $logicalPath, $body);
+    }
+
+    /**
+     * Record a failed mapping persistence payload to disk so it can be restored.
+     *
+     * @param array<string, mixed> $payload
+     */
+    protected function recordFailedMappingFallback(array $payload): void
+    {
+        try {
+            $fallbackFile = storage_path('app/pending_media_mappings_recovery.json');
+            File::ensureDirectoryExists(dirname($fallbackFile));
+            $existing = [];
+            if (File::exists($fallbackFile)) {
+                $existing = json_decode((string) File::get($fallbackFile), true) ?: [];
+            }
+            $existing[$payload['local_path']] = $payload;
+            File::put($fallbackFile, json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        } catch (Throwable $e) {
+            Log::error("CloudinaryStorageAdapter: failed to write fallback recovery record: " . $e->getMessage());
+        }
     }
 
     /**
@@ -163,13 +248,13 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
                 ->first();
 
             if ($mapping && filled($mapping->secure_url)) {
-                return MediaUrlResolver::cleanDoubleExtension((string) $mapping->secure_url);
+                return (string) $mapping->secure_url;
             }
         } catch (Throwable) {
             // Fall through if database is unreachable
         }
 
-        // 2. Build exact Cloudinary URL with correct resource_type and no double extension
+        // 2. Build exact Cloudinary URL with correct resource_type
         $builtUrl = MediaUrlResolver::buildCloudinaryUrl($logicalPath);
         if ($builtUrl) {
             return $builtUrl;
@@ -204,12 +289,23 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
 
     /**
      * Delete file from Cloudinary and clean up mapping.
+     * Prevents deletion if the media path is still actively used by another record.
+     * Only deletes mapping when Cloudinary confirms deletion was successful.
      */
     public function delete(string $path): void
     {
         $logicalPath = ltrim(trim($path), '/');
         $cleanPublicId = MediaUrlResolver::extractPublicId($logicalPath);
         $resourceType = MediaUrlResolver::getResourceType($logicalPath);
+
+        // 1. Protect asset if actively referenced by other database records!
+        /** @var MediaStorageService $storageService */
+        $storageService = app(MediaStorageService::class);
+        if ($storageService->isPathUsedByOtherRecords($logicalPath)) {
+            Log::info("CloudinaryStorageAdapter: skipped deleting [{$logicalPath}] as it is actively referenced by other records.");
+
+            return;
+        }
 
         try {
             $mapping = CloudinaryMediaMapping::query()
@@ -219,18 +315,29 @@ class CloudinaryStorageAdapter extends FlysystemCloudinaryAdapter
             $publicId = $mapping?->public_id ?? $cleanPublicId;
             $type = $mapping?->resource_type ?? $resourceType;
 
-            $this->cloudinary->uploadApi()->destroy($publicId, [
+            $response = $this->cloudinary->uploadApi()->destroy($publicId, [
                 'resource_type' => $type,
                 'invalidate' => true,
             ]);
 
-            if ($mapping) {
-                $mapping->delete();
-            }
+            $resArray = $response instanceof ApiResponse ? $response->getArrayCopy() : (array) $response;
+            $resultStatus = (string) ($resArray['result'] ?? '');
 
-            MediaUrlResolver::clearCache();
+            // ONLY delete database mapping if Cloudinary confirms deletion succeeded
+            if ($resultStatus === 'ok' || $resultStatus === 'not found') {
+                if ($mapping) {
+                    $mapping->delete();
+                }
+                MediaUrlResolver::clearCache();
+            } else {
+                Log::error("CloudinaryStorageAdapter: destroy rejected by Cloudinary for [{$publicId}], status: [{$resultStatus}]");
+                throw UnableToDeleteFile::atLocation($path, "Cloudinary destroy rejected with status: [{$resultStatus}]");
+            }
         } catch (Throwable $e) {
             Log::warning("CloudinaryStorageAdapter: delete failed for [{$logicalPath}]: " . $e->getMessage());
+            if ($e instanceof UnableToDeleteFile) {
+                throw $e;
+            }
             throw UnableToDeleteFile::atLocation($path, $e->getMessage(), $e);
         }
     }

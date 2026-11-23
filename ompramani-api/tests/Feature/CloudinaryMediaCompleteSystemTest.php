@@ -562,16 +562,24 @@ class CloudinaryMediaCompleteSystemTest extends TestCase
 
         $mockStorage = \Mockery::mock(MediaStorageService::class);
         $mockStorage->shouldReceive('isConfigured')->andReturn(true);
-        $mockStorage->shouldReceive('getCloudinaryAsset')
+        $mockStorage->shouldReceive('inspectCloudinaryAsset')
             ->with('sutras/thumbnails/known_sutra_cloud.jpg', 'image')
             ->andReturn([
-                'public_id' => 'sutras/thumbnails/known_sutra_cloud',
-                'resource_type' => 'image',
-                'format' => 'jpg',
-                'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/sutras/thumbnails/known_sutra_cloud.jpg',
-                'bytes' => 45000,
+                'status' => 'found',
+                'asset' => [
+                    'public_id' => 'sutras/thumbnails/known_sutra_cloud',
+                    'resource_type' => 'image',
+                    'format' => 'jpg',
+                    'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/sutras/thumbnails/known_sutra_cloud.jpg',
+                    'bytes' => 45000,
+                ],
+                'error' => null,
             ]);
-        $mockStorage->shouldReceive('getCloudinaryAsset')->andReturn(null);
+        $mockStorage->shouldReceive('inspectCloudinaryAsset')->andReturn([
+            'status' => 'not_found',
+            'asset' => null,
+            'error' => 'Not found',
+        ]);
         $mockStorage->shouldReceive('uploadToCloudinary')->andReturn([
             'local_path' => 'sample',
             'public_id' => 'sample',
@@ -614,5 +622,223 @@ class CloudinaryMediaCompleteSystemTest extends TestCase
 
         // Ensure default connection was properly restored
         $this->assertSame($defaultConn, \Illuminate\Support\Facades\DB::getDefaultConnection());
+    }
+
+    /**
+     * 16. Test CloudinaryStorageAdapter upload defaults to overwrite=false and blocks duplicate upload.
+     */
+    public function test_adapter_upload_defaults_to_overwrite_false_and_blocks_duplicate(): void
+    {
+        CloudinaryMediaMapping::create([
+            'local_path' => 'products/existing_item.jpg',
+            'public_id' => 'products/existing_item',
+            'resource_type' => 'image',
+            'format' => 'jpg',
+            'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/products/existing_item.jpg',
+            'status' => 'synced',
+        ]);
+
+        $mockCloudinary = \Mockery::mock(\Cloudinary\Cloudinary::class);
+        $adapter = new \App\Services\Media\CloudinaryStorageAdapter($mockCloudinary);
+
+        $this->expectException(\League\Flysystem\UnableToWriteFile::class);
+        $this->expectExceptionMessage('overwrite is disabled');
+
+        $adapter->write('products/existing_item.jpg', 'new-content', new \League\Flysystem\Config());
+    }
+
+    /**
+     * 17. Test CloudinaryStorageAdapter preserves authentic double extension URL returned by Cloudinary.
+     */
+    public function test_adapter_upload_preserves_authentic_double_extension_from_cloudinary(): void
+    {
+        $mockCloudinary = \Mockery::mock(\Cloudinary\Cloudinary::class);
+        $mockUploadApi = \Mockery::mock(\Cloudinary\Api\Upload\UploadApi::class);
+
+        $mockUploadApi->shouldReceive('upload')
+            ->once()
+            ->andReturn(new \Cloudinary\Api\ApiResponse([
+                'public_id' => 'products/item.jpg',
+                'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/v1/products/item.jpg.jpg',
+                'format' => 'jpg',
+                'resource_type' => 'image',
+                'bytes' => 2048,
+            ], []));
+
+        $mockCloudinary->shouldReceive('uploadApi')->andReturn($mockUploadApi);
+        $adapter = new \App\Services\Media\CloudinaryStorageAdapter($mockCloudinary);
+
+        $adapter->write('products/item.jpg', 'dummy-data', new \League\Flysystem\Config(['overwrite' => true]));
+
+        $mapping = CloudinaryMediaMapping::where('local_path', 'products/item.jpg')->first();
+        $this->assertNotNull($mapping);
+        // Assert the exact URL was preserved and NOT stripped
+        $this->assertSame('https://res.cloudinary.com/dml5eptq2/image/upload/v1/products/item.jpg.jpg', $mapping->secure_url);
+    }
+
+    /**
+     * 18. Test CloudinaryStorageAdapter delete protects shared asset referenced by other records.
+     */
+    public function test_adapter_delete_protects_shared_asset_used_by_other_records(): void
+    {
+        Article::factory()->create([
+            'cover_image' => 'articles/shared_hero.jpg',
+        ]);
+
+        $mapping = CloudinaryMediaMapping::create([
+            'local_path' => 'articles/shared_hero.jpg',
+            'public_id' => 'articles/shared_hero',
+            'resource_type' => 'image',
+            'format' => 'jpg',
+            'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/articles/shared_hero.jpg',
+            'status' => 'synced',
+        ]);
+
+        $mockCloudinary = \Mockery::mock(\Cloudinary\Cloudinary::class);
+        $mockUploadApi = \Mockery::mock(\Cloudinary\Api\Upload\UploadApi::class);
+        // destroy MUST NOT be called because asset is shared!
+        $mockUploadApi->shouldNotReceive('destroy');
+        $mockCloudinary->shouldReceive('uploadApi')->andReturn($mockUploadApi);
+
+        $adapter = new \App\Services\Media\CloudinaryStorageAdapter($mockCloudinary);
+        $adapter->delete('articles/shared_hero.jpg');
+
+        // Mapping must still exist
+        $this->assertDatabaseHas('cloudinary_media_mappings', [
+            'local_path' => 'articles/shared_hero.jpg',
+        ]);
+    }
+
+    /**
+     * 19. Test CloudinaryStorageAdapter delete only deletes mapping when Cloudinary confirms success.
+     */
+    public function test_adapter_delete_only_deletes_mapping_on_cloudinary_success(): void
+    {
+        $mapping = CloudinaryMediaMapping::create([
+            'local_path' => 'products/unshared_temp.jpg',
+            'public_id' => 'products/unshared_temp',
+            'resource_type' => 'image',
+            'format' => 'jpg',
+            'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/products/unshared_temp.jpg',
+            'status' => 'synced',
+        ]);
+
+        $mockCloudinary = \Mockery::mock(\Cloudinary\Cloudinary::class);
+        $mockUploadApi = \Mockery::mock(\Cloudinary\Api\Upload\UploadApi::class);
+
+        // When destroy returns failure status
+        $mockUploadApi->shouldReceive('destroy')
+            ->once()
+            ->andReturn(new \Cloudinary\Api\ApiResponse(['result' => 'error'], []));
+        $mockCloudinary->shouldReceive('uploadApi')->andReturn($mockUploadApi);
+
+        $adapter = new \App\Services\Media\CloudinaryStorageAdapter($mockCloudinary);
+
+        try {
+            $adapter->delete('products/unshared_temp.jpg');
+            $this->fail('Expected UnableToDeleteFile was not thrown');
+        } catch (\League\Flysystem\UnableToDeleteFile $e) {
+            $this->assertStringContainsString('Cloudinary destroy rejected', $e->getMessage());
+        }
+
+        // Mapping must still be preserved
+        $this->assertDatabaseHas('cloudinary_media_mappings', [
+            'local_path' => 'products/unshared_temp.jpg',
+        ]);
+    }
+
+    /**
+     * 20. Test ReconcileMediaMappingsCommand handles Cloudinary API rate limits and errors gracefully.
+     */
+    public function test_reconcile_command_handles_api_rate_limits_safely(): void
+    {
+        Sutra::factory()->create([
+            'id' => 7,
+            'title' => 'Kinh A Di Đà',
+            'thumbnail' => 'sutras/thumbnails/sutra7_rate_limit.jpg',
+        ]);
+
+        $mockStorage = \Mockery::mock(MediaStorageService::class);
+        $mockStorage->shouldReceive('isConfigured')->andReturn(true);
+        $mockStorage->shouldReceive('inspectCloudinaryAsset')
+            ->with('sutras/thumbnails/sutra7_rate_limit.jpg', 'image')
+            ->andReturn([
+                'status' => 'rate_limited',
+                'asset' => null,
+                'error' => 'API Rate Limit Exceeded (HTTP 429)',
+            ]);
+        $mockStorage->shouldReceive('inspectCloudinaryAsset')->andReturn([
+            'status' => 'not_found',
+            'asset' => null,
+            'error' => 'Not found',
+        ]);
+
+        $this->app->instance(MediaStorageService::class, $mockStorage);
+
+        $csvPath = storage_path('app/test_rate_limit_report.csv');
+        $this->artisan('cloudinary:reconcile-media', [
+            '--dry-run' => true,
+            '--output-csv' => $csvPath,
+        ])->assertExitCode(0);
+
+        $this->assertFileExists($csvPath);
+        $csvContent = File::get($csvPath);
+        $this->assertStringContainsString('API_RATE_LIMITED', $csvContent);
+
+        if (File::exists($csvPath)) {
+            File::delete($csvPath);
+        }
+    }
+
+    /**
+     * 21. Test ReconcileMediaMappingsCommand recovers pending failed mappings from recovery queue.
+     */
+    public function test_reconcile_command_recovers_pending_mappings_from_queue(): void
+    {
+        $recoveryFile = storage_path('app/pending_media_mappings_recovery.json');
+        File::ensureDirectoryExists(dirname($recoveryFile));
+        File::put($recoveryFile, json_encode([
+            'products/queued_recovery.jpg' => [
+                'local_path' => 'products/queued_recovery.jpg',
+                'public_id' => 'products/queued_recovery',
+                'resource_type' => 'image',
+                'format' => 'jpg',
+                'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/products/queued_recovery.jpg',
+                'checksum' => 'recovery-sha',
+                'file_size' => 4096,
+                'failed_at' => now()->toIso8601String(),
+            ],
+        ]));
+
+        $mockStorage = \Mockery::mock(MediaStorageService::class);
+        $mockStorage->shouldReceive('isConfigured')->andReturn(true);
+        $mockStorage->shouldReceive('inspectCloudinaryAsset')->andReturn([
+            'status' => 'not_found',
+            'asset' => null,
+            'error' => 'Not found',
+        ]);
+        $mockStorage->shouldReceive('uploadToCloudinary')->andReturn([
+            'local_path' => 'sample',
+            'public_id' => 'sample',
+            'resource_type' => 'image',
+            'format' => 'jpg',
+            'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/sample.jpg',
+            'checksum' => 'sample-sha',
+            'file_size' => 1024,
+            'status' => 'synced',
+        ]);
+        $this->app->instance(MediaStorageService::class, $mockStorage);
+
+        $this->artisan('cloudinary:reconcile-media', [
+            '--fix' => true,
+        ])->assertExitCode(0);
+
+        $this->assertDatabaseHas('cloudinary_media_mappings', [
+            'local_path' => 'products/queued_recovery.jpg',
+            'secure_url' => 'https://res.cloudinary.com/dml5eptq2/image/upload/products/queued_recovery.jpg',
+        ]);
+
+        // Recovery file must be cleared after successful fix
+        $this->assertFileDoesNotExist($recoveryFile);
     }
 }
