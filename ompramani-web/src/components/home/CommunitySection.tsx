@@ -52,7 +52,7 @@ export function CommunitySection() {
         </div>
 
         <Link
-          href="/cong-dong"
+          href="/cau-nguyen"
           className="w-full py-2.5 rounded-xl bg-primary text-on-primary hover:bg-on-primary-container transition-colors font-label-lg text-label-lg font-semibold flex items-center justify-center gap-2"
         >
           <span>Tham gia Đạo Tràng Trực Tuyến</span>
