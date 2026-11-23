@@ -1,6 +1,5 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 
 export function Footer() {
   return (
@@ -10,13 +9,6 @@ export function Footer() {
           {/* Brand Col */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              <Image
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0yHXbepcasIOm7sdXStFD3jiTbEWkLEAuhYWHZoReJePvbIXopc820f28MkNX-wB7UZi4KzW1h5duIxv32pDxQIQCJs93zhGbWD2RuO41QWZZdoHgw9FUZ6G_5NLYvZHXMWde_BDeXdHmHhOmCpaNqKjG9fS9CESHLSlHBD4666w6Ib9scXz19o_ydlmVm8s5DqEMixxNsiVmq7vEIoiocrfJVJZOk9Jok8kDE6A"
-                alt="Om Mani Logo"
-                width={32}
-                height={32}
-                className="h-8 w-auto object-contain"
-              />
               <span className="font-headline-md text-headline-md font-semibold text-primary">
                 Om Mani
               </span>
@@ -142,10 +134,10 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/courses"
+                  href="/video-phat-phap"
                   className="hover:text-primary transition-colors"
                 >
-                  Khóa Tu Học Cuối Tuần
+                  Khóa Tu Học &amp; Bài Giảng
                 </Link>
               </li>
             </ul>
@@ -159,7 +151,7 @@ export function Footer() {
             <ul className="space-y-2 font-body-sm text-body-sm">
               <li>
                 <Link
-                  href="/support/print"
+                  href="/cua-hang"
                   className="hover:text-primary transition-colors"
                 >
                   Đóng Góp Ấn Tống Kinh Điển
@@ -167,7 +159,7 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/prayers/submit"
+                  href="/cau-nguyen/gui-loi-nguyen"
                   className="hover:text-primary transition-colors"
                 >
                   Gửi Ý Niệm Cầu An Cầu Siêu
@@ -178,15 +170,7 @@ export function Footer() {
                   href="/tim-chua"
                   className="hover:text-primary transition-colors"
                 >
-                  Chùa Việt Nam
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/charity"
-                  className="hover:text-primary transition-colors"
-                >
-                  Cúng Dường &amp; Thiện Nguyện
+                  Chùa Việt Nam &amp; Thiện Nguyện
                 </Link>
               </li>
               <li>

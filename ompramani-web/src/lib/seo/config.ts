@@ -6,7 +6,7 @@ export const SITE_CONFIG = {
   defaultDescription:
     "Không gian tu tập và đọc kinh Phật giáo trực tuyến. Cung cấp thư viện kinh điển Tịnh Độ, Thần chú, Đại nguyện Phật & Bồ Tát, Lịch vạn niên và Pháp bảo tu học trang nghiêm.",
   defaultOgImage:
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuA0yHXbepcasIOm7sdXStFD3jiTbEWkLEAuhYWHZoReJePvbIXopc820f28MkNX-wB7UZi4KzW1h5duIxv32pDxQIQCJs93zhGbWD2RuO41QWZZdoHgw9FUZ6G_5NLYvZHXMWde_BDeXdHmHhOmCpaNqKjG9fS9CESHLSlHBD4666w6Ib9scXz19o_ydlmVm8s5DqEMixxNsiVmq7vEIoiocrfJVJZOk9Jok8kDE6A",
+    `${process.env.NEXT_PUBLIC_SITE_URL || "https://ompramani.vercel.app"}/images/hero-meditation.jpg`,
   locale: "vi_VN",
 };
 
