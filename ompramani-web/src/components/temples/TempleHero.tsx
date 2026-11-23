@@ -1,8 +1,8 @@
 import React from "react";
-import Image from "next/image";
 import { TempleDetail } from "@/types/temple";
 import { resolveMediaUrl } from "@/lib/utils/media";
 import { TempleShareAction } from "./TempleShareAction";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface TempleHeroProps {
   temple: TempleDetail;
@@ -21,25 +21,24 @@ export function TempleHero({ temple }: TempleHeroProps) {
     <section aria-labelledby="temple-name" className="w-full">
       {/* Full-width Edge-to-Edge Hero Banner Image */}
       <div className="w-full h-[45vh] sm:h-[55vh] md:h-[65vh] lg:h-[72vh] min-h-[380px] max-h-[760px] relative overflow-hidden bg-surface-container-low shadow-sm">
-        {coverUrl ? (
-          <Image
-            src={coverUrl}
-            alt={`Ảnh quang cảnh ${temple.name}`}
-            fill
-            priority
-            className="object-cover object-center"
-            sizes="100vw"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-primary/40 bg-radial from-surface-container-high/40 to-surface-container-low space-y-2 p-6 text-center">
-            <span className="material-symbols-outlined text-[64px]">
-              temple_buddhist
-            </span>
-            <span className="font-body-xs text-xs text-on-surface-variant/60 italic">
-              Chưa có hình ảnh quang cảnh được xác minh
-            </span>
-          </div>
-        )}
+        <SafeImage
+          src={coverUrl}
+          alt={`Ảnh quang cảnh ${temple.name}`}
+          fill
+          priority
+          className="object-cover object-center"
+          sizes="100vw"
+          fallback={
+            <div className="w-full h-full flex flex-col items-center justify-center text-primary/40 bg-radial from-surface-container-high/40 to-surface-container-low space-y-2 p-6 text-center">
+              <span className="material-symbols-outlined text-[64px]">
+                temple_buddhist
+              </span>
+              <span className="font-body-xs text-xs text-on-surface-variant/60 italic">
+                Chưa có hình ảnh quang cảnh được xác minh
+              </span>
+            </div>
+          }
+        />
       </div>
 
       {/* Title, Badges & Introduction Container */}

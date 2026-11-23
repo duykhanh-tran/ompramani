@@ -2,11 +2,11 @@
 
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Article, RelatedArticleItem } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
 import { formatArticleDate, estimateReadingTime } from "@/lib/utils/sacred";
 import { FavoriteButton } from "@/components/favorites/FavoriteButton";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface ArticleCardProps {
   article: Article | RelatedArticleItem;
@@ -40,21 +40,20 @@ export function ArticleCard({
         className="group flex items-start gap-4 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/40 hover:border-primary/40 hover:shadow-sm transition-all"
       >
         <div className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-surface-container-low">
-          {coverImage ? (
-            <Image
-              src={coverImage}
-              alt={title}
-              fill
-              sizes="80px"
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-outline/50 bg-secondary-container/20">
-              <span className="material-symbols-outlined text-2xl text-primary/60">
-                auto_stories
-              </span>
-            </div>
-          )}
+          <SafeImage
+            src={coverImage}
+            alt={title}
+            fill
+            sizes="80px"
+            className="object-cover group-hover:scale-105 transition-transform duration-300"
+            fallback={
+              <div className="w-full h-full flex items-center justify-center text-outline/50 bg-secondary-container/20">
+                <span className="material-symbols-outlined text-2xl text-primary/60">
+                  auto_stories
+                </span>
+              </div>
+            }
+          />
         </div>
         <div className="min-w-0 flex-1">
           {categoryName && (
@@ -82,21 +81,20 @@ export function ArticleCard({
         className="group flex flex-col sm:flex-row items-center gap-5 p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/40 hover:border-primary/40 hover:shadow-md transition-all"
       >
         <div className="relative w-full sm:w-48 h-36 shrink-0 rounded-xl overflow-hidden bg-surface-container-low">
-          {coverImage ? (
-            <Image
-              src={coverImage}
-              alt={title}
-              fill
-              sizes="(max-width: 640px) 100vw, 192px"
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-outline/50 bg-secondary-container/20">
-              <span className="material-symbols-outlined text-4xl text-primary/60">
-                auto_stories
-              </span>
-            </div>
-          )}
+          <SafeImage
+            src={coverImage}
+            alt={title}
+            fill
+            sizes="(max-width: 640px) 100vw, 192px"
+            className="object-cover group-hover:scale-105 transition-transform duration-300"
+            fallback={
+              <div className="w-full h-full flex items-center justify-center text-outline/50 bg-secondary-container/20">
+                <span className="material-symbols-outlined text-4xl text-primary/60">
+                  auto_stories
+                </span>
+              </div>
+            }
+          />
         </div>
         <div className="min-w-0 flex-1 w-full">
           {categoryName && (
@@ -130,24 +128,23 @@ export function ArticleCard({
     >
       {/* Cover Image Container */}
       <div className="relative w-full aspect-[16/10] bg-surface-container-low overflow-hidden">
-        {coverImage ? (
-          <Image
-            src={coverImage}
-            alt={title}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container-low to-surface-container text-outline/40 p-4">
-            <span className="material-symbols-outlined text-5xl text-primary/40 mb-1">
-              menu_book
-            </span>
-            <span className="font-label-sm text-xs text-outline tracking-wider">
-              OmPraMani
-            </span>
-          </div>
-        )}
+        <SafeImage
+          src={coverImage}
+          alt={title}
+          fill
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+          fallback={
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container-low to-surface-container text-outline/40 p-4">
+              <span className="material-symbols-outlined text-5xl text-primary/40 mb-1">
+                menu_book
+              </span>
+              <span className="font-label-sm text-xs text-outline tracking-wider">
+                OmPraMani
+              </span>
+            </div>
+          }
+        />
 
         {categoryName && (
           <div className="absolute top-3 left-3 z-10">

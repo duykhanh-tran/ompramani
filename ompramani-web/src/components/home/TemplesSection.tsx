@@ -1,8 +1,8 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { TempleSummary } from "@/types/temple";
 import { resolveMediaUrl } from "@/lib/utils/media";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface TemplesSectionProps {
   temples?: TempleSummary[];
@@ -53,19 +53,15 @@ export function TemplesSection({ temples }: TemplesSectionProps) {
             >
               {/* Image with Location Tag */}
               <div className="h-56 relative overflow-hidden bg-surface-container-low">
-                {resolvedCover ? (
-                  <Image
-                    src={resolvedCover}
-                    alt={temple.name}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-surface-container text-primary">
-                    <span className="material-symbols-outlined text-[48px]">temple_buddhist</span>
-                  </div>
-                )}
+                <SafeImage
+                  src={resolvedCover}
+                  alt={temple.name}
+                  fill
+                  fallbackIcon="temple_buddhist"
+                  fallbackText={temple.name}
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover group-hover:scale-105 transition-transform duration-500"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
                 <span className="absolute bottom-3 left-3 px-3 py-1 bg-surface-container-lowest/90 backdrop-blur-md rounded-full font-label-md text-xs font-semibold text-on-surface flex items-center gap-1.5 shadow-xs">
                   <span className="material-symbols-outlined text-[16px] text-primary">

@@ -1,9 +1,9 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { BuddhistFigure } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
 import { getFigureTraditions, getFigureTypeLabel } from "@/lib/utils/sacred";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface BuddhistFigureCardProps {
   figure: BuddhistFigure;
@@ -29,21 +29,34 @@ export function BuddhistFigureCard({ figure }: BuddhistFigureCardProps) {
         {imageUrl ? (
           <>
             {/* Ambient blur backdrop matching colors of the painting */}
-            <Image
+            <SafeImage
               src={imageUrl}
               alt=""
               fill
               className="object-cover blur-xl opacity-30 scale-110 pointer-events-none"
               aria-hidden="true"
+              fallback={<div className="hidden" />}
             />
             {/* Full uncropped artwork - sits below the badges (z-0) */}
             <div className="relative w-full h-full z-0">
-              <Image
+              <SafeImage
                 src={imageUrl}
                 alt={figure.name}
                 fill
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
                 className="object-contain group-hover:scale-[1.03] transition-transform duration-500 drop-shadow-sm"
+                fallback={
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container via-surface-container-high to-secondary-container/40 text-primary p-6">
+                    <div className="w-16 h-16 rounded-full bg-surface-container-lowest/70 border border-outline-variant/40 flex items-center justify-center shadow-xs mb-3">
+                      <span className="material-symbols-outlined text-[36px] text-primary">
+                        self_improvement
+                      </span>
+                    </div>
+                    <span className="font-headline-md text-sm text-center text-on-surface line-clamp-1 font-medium">
+                      {figure.name}
+                    </span>
+                  </div>
+                }
               />
             </div>
           </>

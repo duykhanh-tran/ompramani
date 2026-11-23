@@ -75,8 +75,9 @@ class CloudinaryMediaCompleteSystemTest extends TestCase
         $dirtyMp3 = 'mantras/audio/chant.mp3.mp3';
         $this->assertSame('mantras/audio/chant.mp3', MediaUrlResolver::cleanDoubleExtension($dirtyMp3));
 
+        // MediaUrlResolver::resolve preserves authentic full HTTPS URLs intact without stripping extensions
         $dirtyResolved = MediaUrlResolver::resolve($dirtyUrl);
-        $this->assertSame('https://res.cloudinary.com/dml5eptq2/image/upload/v12345/articles/covers/cover.jpg', $dirtyResolved);
+        $this->assertSame('https://res.cloudinary.com/dml5eptq2/image/upload/v12345/articles/covers/cover.jpg.jpg', $dirtyResolved);
     }
 
     /**
@@ -840,5 +841,37 @@ class CloudinaryMediaCompleteSystemTest extends TestCase
 
         // Recovery file must be cleared after successful fix
         $this->assertFileDoesNotExist($recoveryFile);
+    }
+
+    /**
+     * 17. Test MediaUrlResolver and API Resources preserve authentic Cloudinary .jpg.jpg URLs.
+     */
+    public function test_media_url_resolver_and_resources_preserve_authentic_cloudinary_urls(): void
+    {
+        MediaUrlResolver::clearCache();
+
+        $doubleExtUrl = 'https://res.cloudinary.com/dml5eptq2/image/upload/v1795404994/buddhist-figures/01M837M4DRK3WFS62J760M3PRJ.jpg.jpg';
+        $resolvedDirect = MediaUrlResolver::resolve($doubleExtUrl);
+        $this->assertSame($doubleExtUrl, $resolvedDirect);
+
+        // Map a local path to a Cloudinary delivery URL with .jpg.jpg
+        CloudinaryMediaMapping::query()->create([
+            'local_path' => 'buddhist-figures/01M837M4DRK3WFS62J760M3PRJ.jpg',
+            'public_id' => 'buddhist-figures/01M837M4DRK3WFS62J760M3PRJ.jpg',
+            'resource_type' => 'image',
+            'format' => 'jpg',
+            'secure_url' => $doubleExtUrl,
+            'status' => 'synced',
+        ]);
+
+        MediaUrlResolver::clearCache();
+
+        // Resolving by relative path returns authentic secure_url intact
+        $resolvedFromMapping = MediaUrlResolver::resolve('buddhist-figures/01M837M4DRK3WFS62J760M3PRJ.jpg');
+        $this->assertSame($doubleExtUrl, $resolvedFromMapping);
+
+        // Also handles when incoming path has duplicate extension
+        $resolvedWithDouble = MediaUrlResolver::resolve('buddhist-figures/01M837M4DRK3WFS62J760M3PRJ.jpg.jpg');
+        $this->assertSame($doubleExtUrl, $resolvedWithDouble);
     }
 }

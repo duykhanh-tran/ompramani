@@ -1,8 +1,8 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { BuddhistFigure } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface Props {
   figures?: BuddhistFigure[];
@@ -48,21 +48,15 @@ export function BuddhistFiguresSection({ figures }: Props) {
               className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-xs hover:shadow-lg transition-all duration-300 group flex flex-col border border-outline-variant/40 hover:border-primary/50"
             >
               <div className="aspect-[3/4] bg-surface-container-low overflow-hidden relative">
-                {imageUrl ? (
-                  <Image
-                    src={imageUrl}
-                    alt={figure.name}
-                    fill
-                    sizes="(max-width: 768px) 50vw, 25vw"
-                    className="object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-surface-container text-primary">
-                    <span className="material-symbols-outlined text-[48px]">
-                      self_improvement
-                    </span>
-                  </div>
-                )}
+                <SafeImage
+                  src={imageUrl}
+                  alt={figure.name}
+                  fill
+                  fallbackIcon="self_improvement"
+                  fallbackText={figure.name}
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                  className="object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent pointer-events-none opacity-80 group-hover:opacity-60 transition-opacity" />
               </div>
 

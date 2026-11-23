@@ -1,9 +1,9 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Article } from "@/types/api";
 import { resolveMediaUrl } from "@/lib/utils/media";
 import { FavoriteButton } from "@/components/favorites/FavoriteButton";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface ArticleHeroProps {
   article: Article;
@@ -68,13 +68,15 @@ export function ArticleHero({ article }: ArticleHeroProps) {
       {coverImage && (
         <div className="w-full mb-8">
           <div className="relative w-full aspect-[16/9] max-h-[580px] rounded-2xl overflow-hidden bg-surface-container-low shadow-md border border-outline-variant/40">
-            <Image
+            <SafeImage
               src={coverImage}
               alt={article.title}
               fill
               priority
               sizes="(max-width: 1280px) 100vw, 1200px"
               className="object-cover"
+              fallbackIcon="auto_stories"
+              fallbackText={article.title}
             />
           </div>
         </div>

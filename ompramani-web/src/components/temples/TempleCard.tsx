@@ -1,8 +1,8 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { TempleSummary } from "@/types/temple";
 import { resolveMediaUrl } from "@/lib/utils/media";
+import { SafeImage } from "@/components/common/SafeImage";
 
 interface TempleCardProps {
   temple: TempleSummary;
@@ -15,24 +15,23 @@ export function TempleCard({ temple }: TempleCardProps) {
     <article className="bg-surface-container-lowest rounded-2xl overflow-hidden border border-outline-variant/40 hover:border-outline-variant/80 hover:shadow-md transition-all flex flex-col group h-full">
       {/* Cover Image or Neutral Spiritual Placeholder */}
       <div className="h-48 w-full relative overflow-hidden bg-surface-container">
-        {coverUrl ? (
-          <Image
-            src={coverUrl}
-            alt={temple.name}
-            fill
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container to-surface-container-high text-on-surface-variant/40 p-4 select-none">
-            <span className="material-symbols-outlined text-[48px] text-primary/30 mb-1">
-              temple_buddhist
-            </span>
-            <span className="font-label-sm text-label-sm tracking-wider uppercase opacity-70">
-              {temple.place_type_label || "Tự Viện"}
-            </span>
-          </div>
-        )}
+        <SafeImage
+          src={coverUrl}
+          alt={temple.name}
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          fallback={
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-surface-container to-surface-container-high text-on-surface-variant/40 p-4 select-none">
+              <span className="material-symbols-outlined text-[48px] text-primary/30 mb-1">
+                temple_buddhist
+              </span>
+              <span className="font-label-sm text-label-sm tracking-wider uppercase opacity-70">
+                {temple.place_type_label || "Tự Viện"}
+              </span>
+            </div>
+          }
+        />
 
         {/* Place Type Badge - sits on top layer */}
         <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 flex-wrap">
